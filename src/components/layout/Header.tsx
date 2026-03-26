@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { BookOpen, LayoutDashboard, LogOut, Settings, Plus } from "lucide-react"
+import { ThemeToggle } from "@/components/ui/theme-toggle"
 
 export function Header() {
   const { data: session } = useSession()
@@ -51,6 +52,7 @@ export function Header() {
           </nav>
 
           <div className="flex items-center gap-3">
+            <ThemeToggle />
             {session ? (
               <>
                 <Link
