@@ -11,7 +11,7 @@ const plans = [
     name: "Free",
     price: "$0",
     period: "forever",
-    description: "Perfect for trying out StorySnap",
+    description: "Perfect for trying out PicTale",
     badge: null,
     features: [
       "3 free story books",

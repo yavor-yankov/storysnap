@@ -21,12 +21,12 @@ export function WelcomeEmail({ userName, userEmail }: WelcomeEmailProps) {
   return (
     <Html>
       <Head />
-      <Preview>Welcome to StorySnap — Your first 3 books are free!</Preview>
+      <Preview>Welcome to PicTale — Your first 3 books are free!</Preview>
       <Body style={{ backgroundColor: "#f5f3ff", fontFamily: "Arial, sans-serif" }}>
         <Container style={{ maxWidth: "600px", margin: "0 auto", padding: "20px" }}>
           <Section style={{ backgroundColor: "#ffffff", borderRadius: "16px", padding: "40px", boxShadow: "0 4px 20px rgba(139,92,246,0.1)" }}>
             <Heading style={{ color: "#7c3aed", fontSize: "28px", textAlign: "center" }}>
-              Welcome to StorySnap! 📚
+              Welcome to PicTale! 📚
             </Heading>
 
             <Text style={{ fontSize: "16px", color: "#374151", lineHeight: "1.6" }}>
@@ -34,7 +34,7 @@ export function WelcomeEmail({ userName, userEmail }: WelcomeEmailProps) {
             </Text>
 
             <Text style={{ fontSize: "16px", color: "#374151", lineHeight: "1.6" }}>
-              You&apos;re all set! Your StorySnap account has been created and you have <strong>3 free credits</strong> ready to use.
+              You&apos;re all set! Your PicTale account has been created and you have <strong>3 free credits</strong> ready to use.
             </Text>
 
             <Section style={{ backgroundColor: "#f5f3ff", borderRadius: "12px", padding: "20px", margin: "20px 0" }}>
@@ -87,7 +87,7 @@ export function BookReadyEmail({ userName, bookTitle, bookId, artStyle }: BookRe
   return (
     <Html>
       <Head />
-      <Preview>Your StorySnap book is ready! — {bookTitle}</Preview>
+      <Preview>Your PicTale book is ready! — {bookTitle}</Preview>
       <Body style={{ backgroundColor: "#f5f3ff", fontFamily: "Arial, sans-serif" }}>
         <Container style={{ maxWidth: "600px", margin: "0 auto", padding: "20px" }}>
           <Section style={{ backgroundColor: "#ffffff", borderRadius: "16px", padding: "40px", boxShadow: "0 4px 20px rgba(139,92,246,0.1)" }}>
@@ -135,7 +135,7 @@ export function ReceiptEmail({ userName, credits, amount, currency }: ReceiptEma
   return (
     <Html>
       <Head />
-      <Preview>StorySnap — Payment Confirmation</Preview>
+      <Preview>PicTale — Payment Confirmation</Preview>
       <Body style={{ backgroundColor: "#f5f3ff", fontFamily: "Arial, sans-serif" }}>
         <Container style={{ maxWidth: "600px", margin: "0 auto", padding: "20px" }}>
           <Section style={{ backgroundColor: "#ffffff", borderRadius: "16px", padding: "40px" }}>

@@ -2,7 +2,7 @@ import { StyleSelector } from "@/components/upload/StyleSelector"
 import { Header } from "@/components/layout/Header"
 
 export const metadata = {
-  title: "Choose Style — StorySnap",
+  title: "Choose Style — PicTale",
 }
 
 export default function StylePage() {

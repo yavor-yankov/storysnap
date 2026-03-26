@@ -1,10 +1,10 @@
 @AGENTS.md
 
-# StorySnap — AI Portrait-to-Book Web App
+# PicTale — AI Portrait-to-Book Web App
 
 ## Project Overview
 
-StorySnap is a web app where users upload portrait photos and get AI-generated illustrated books. Users choose an art style (comic, anime, watercolor, manga, storybook, pop-art), a short story is generated featuring their character, and the result is a downloadable book with illustrations.
+PicTale is a web app where users upload portrait photos and get AI-generated illustrated books. Users choose an art style (comic, anime, watercolor, manga, storybook, pop-art), a short story is generated featuring their character, and the result is a downloadable book with illustrations.
 
 ## Tech Stack
 

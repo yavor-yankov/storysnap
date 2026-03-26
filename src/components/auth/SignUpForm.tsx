@@ -66,7 +66,7 @@ export function SignUpForm() {
               <BookOpen className="w-5 h-5 text-white" />
             </div>
             <span className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">
-              StorySnap
+              PicTale
             </span>
           </Link>
           <h1 className="text-3xl font-bold text-foreground">Create account</h1>

@@ -2,7 +2,7 @@ import { PortraitUploader } from "@/components/upload/PortraitUploader"
 import { Header } from "@/components/layout/Header"
 
 export const metadata = {
-  title: "Upload Portrait — StorySnap",
+  title: "Upload Portrait — PicTale",
 }
 
 export default function UploadPage() {

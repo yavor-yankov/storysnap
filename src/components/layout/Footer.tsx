@@ -12,7 +12,7 @@ export function Footer() {
                 <BookOpen className="w-4 h-4 text-white" />
               </div>
               <span className="text-lg font-bold bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">
-                StorySnap
+                PicTale
               </span>
             </Link>
             <p className="text-sm text-muted-foreground">
@@ -81,7 +81,7 @@ export function Footer() {
 
         <div className="mt-8 pt-8 border-t border-border/50 flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-sm text-muted-foreground">
-            © 2025 StorySnap. All rights reserved.
+            © 2025 PicTale. All rights reserved.
           </p>
           <p className="text-sm text-muted-foreground flex items-center gap-1">
             Made with <Heart className="w-3 h-3 fill-current text-pink-500" /> using AI

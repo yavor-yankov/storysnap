@@ -2,7 +2,7 @@ import { GeneratePage } from "@/components/upload/GeneratePage"
 import { Header } from "@/components/layout/Header"
 
 export const metadata = {
-  title: "Generating Your Book — StorySnap",
+  title: "Generating Your Book — PicTale",
 }
 
 export default function GeneratePageRoute() {
