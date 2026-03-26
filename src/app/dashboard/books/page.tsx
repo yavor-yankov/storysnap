@@ -7,7 +7,7 @@ import { BookCard } from "@/components/book/BookCard"
 import { Plus, BookOpen } from "lucide-react"
 
 export const metadata = {
-  title: "My Books — PicTale",
+  title: "My Books — PixTales",
 }
 
 export default async function BooksPage() {

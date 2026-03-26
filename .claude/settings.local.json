@@ -10,7 +10,12 @@
       "Bash(npm run:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(code .)",
+      "Bash(ls:*)",
+      "Bash(curl -s https://who.is/whois/pixtales.ai)",
+      "Bash(curl -s https://who.is/whois/pixtales.com)",
+      "Bash(git:*)"
     ]
   },
   "hooks": {

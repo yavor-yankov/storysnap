@@ -4,7 +4,7 @@ import { Header } from "@/components/layout/Header"
 import { Loader2 } from "lucide-react"
 
 export const metadata = {
-  title: "Preview Your Book — PicTale",
+  title: "Preview Your Book — PixTales",
 }
 
 export default function PreviewPageRoute() {

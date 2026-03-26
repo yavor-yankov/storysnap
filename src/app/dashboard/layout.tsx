@@ -5,7 +5,7 @@ import { DashboardSidebar } from "@/components/layout/DashboardSidebar"
 import { Header } from "@/components/layout/Header"
 
 export const metadata = {
-  title: "Dashboard — PicTale",
+  title: "Dashboard — PixTales",
 }
 
 export default async function DashboardLayout({

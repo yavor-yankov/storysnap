@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { AccountSettingsForm } from "@/components/dashboard/AccountSettingsForm"
 
 export const metadata = {
-  title: "Settings — PicTale",
+  title: "Settings — PixTales",
 }
 
 export default async function SettingsPage() {

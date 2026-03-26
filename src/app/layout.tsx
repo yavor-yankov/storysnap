@@ -15,11 +15,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PicTale — AI Portrait-to-Book App",
+  title: "PixTales — AI Portrait-to-Book App",
   description: "Upload your portrait and get a beautifully illustrated AI-generated story book in minutes.",
   keywords: ["AI", "story book", "portrait", "illustration", "personalized"],
   openGraph: {
-    title: "PicTale — AI Portrait-to-Book App",
+    title: "PixTales — AI Portrait-to-Book App",
     description: "Upload your portrait and get a beautifully illustrated AI-generated story book in minutes.",
     type: "website",
   },
