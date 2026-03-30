@@ -2,7 +2,6 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Star, Clock, BookOpen, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { getStoryBySlug, STORY_GRADIENTS } from "@/lib/stories";
 
 interface PageProps {

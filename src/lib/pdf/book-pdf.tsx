@@ -1,25 +1,24 @@
-// Server-side PDF generation using @react-pdf/renderer
-// Generates a full children's book PDF from story pages
+// Print-ready PDF generation using @react-pdf/renderer
+// Page size: 210x210mm square (standard children's book)
+// Embed AI-generated illustrations as base64 images
 
 import {
   Document,
   Page,
   View,
   Text,
+  Image,
   StyleSheet,
   pdf,
   type DocumentProps,
 } from "@react-pdf/renderer";
 import React, { type ReactElement } from "react";
 
-// Register a safe fallback font (built-in)
-// In production, register Nunito from Google Fonts for brand consistency
-
 interface BookPage {
   pageNumber: number;
   textContent: string;
-  gradient: string; // CSS class — not used in PDF, but kept for reference
-  imageUrl?: string; // Supabase storage URL for the generated illustration
+  gradient?: string;
+  imageUrl?: string;
 }
 
 interface BookPdfProps {
@@ -28,124 +27,191 @@ interface BookPdfProps {
   pages: BookPage[];
 }
 
+// 210x210mm square book — 595.28pt wide, 595.28pt tall (210mm in PDF points at 72dpi)
+const PAGE_SIZE = { width: 595.28, height: 595.28 };
+const BLEED = 8; // 8pt bleed on each side (~3mm)
+
 const styles = StyleSheet.create({
-  page: {
-    backgroundColor: "#f4ece0",
-    flexDirection: "column",
-  },
-  coverPage: {
+  // ── Cover ────────────────────────────────────────────────────
+  cover: {
+    width: PAGE_SIZE.width,
+    height: PAGE_SIZE.height,
     backgroundColor: "#ff723b",
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    padding: 40,
+    padding: 48,
   },
   coverBadge: {
-    backgroundColor: "rgba(255,255,255,0.2)",
+    backgroundColor: "rgba(255,255,255,0.18)",
     borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    marginBottom: 24,
+    paddingHorizontal: 18,
+    paddingVertical: 7,
+    marginBottom: 28,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.3)",
   },
   coverBadgeText: {
     color: "#ffffff",
-    fontSize: 10,
+    fontSize: 8,
     fontWeight: "bold",
-    letterSpacing: 2,
+    letterSpacing: 3,
+  },
+  coverDecoration: {
+    width: 80,
+    height: 4,
+    backgroundColor: "rgba(255,255,255,0.4)",
+    borderRadius: 2,
+    marginBottom: 24,
   },
   coverTitle: {
     color: "#ffffff",
-    fontSize: 32,
+    fontSize: 38,
     fontWeight: "bold",
     textAlign: "center",
-    lineHeight: 1.3,
+    lineHeight: 1.25,
     marginBottom: 16,
   },
   coverSubtitle: {
     color: "rgba(255,255,255,0.85)",
-    fontSize: 16,
+    fontSize: 18,
     textAlign: "center",
+    fontStyle: "italic",
   },
   coverFooter: {
     position: "absolute",
-    bottom: 30,
+    bottom: 28,
     left: 0,
     right: 0,
     alignItems: "center",
   },
   coverFooterText: {
-    color: "rgba(255,255,255,0.6)",
-    fontSize: 9,
-    letterSpacing: 1,
+    color: "rgba(255,255,255,0.55)",
+    fontSize: 8,
+    letterSpacing: 2,
+  },
+  coverSpine: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 18,
+    backgroundColor: "rgba(0,0,0,0.12)",
   },
 
-  // Story pages
-  illustrationArea: {
-    flex: 1,
-    backgroundColor: "#ebe1d3",
-    alignItems: "center",
-    justifyContent: "center",
+  // ── Story pages ──────────────────────────────────────────────
+  page: {
+    width: PAGE_SIZE.width,
+    height: PAGE_SIZE.height,
+    backgroundColor: "#fdf8f3",
+    flexDirection: "column",
   },
-  illustrationPlaceholder: {
+  illustrationArea: {
+    width: PAGE_SIZE.width,
+    height: PAGE_SIZE.height * 0.72,
+    backgroundColor: "#ebe1d3",
+    overflow: "hidden",
+  },
+  illustrationImage: {
     width: "100%",
     height: "100%",
-    backgroundColor: "#d4c5b0",
+    objectFit: "cover",
   },
-  illustrationText: {
-    color: "#6b625e",
-    fontSize: 10,
-    textAlign: "center",
+  illustrationFallback: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#e0d4c0",
+  },
+  illustrationFallbackText: {
+    color: "#9b8e82",
+    fontSize: 9,
   },
   textArea: {
+    flex: 1,
     backgroundColor: "#ffffff",
-    padding: 20,
-    minHeight: 80,
+    paddingHorizontal: 36,
+    paddingVertical: 20,
     borderTopWidth: 1,
-    borderTopColor: "#e8ddd0",
+    borderTopColor: "#f0e8dc",
     justifyContent: "center",
+    alignItems: "center",
   },
   storyText: {
-    color: "#3c3a39",
-    fontSize: 13,
-    lineHeight: 1.6,
+    color: "#2d1a0e",
+    fontSize: 16,
+    lineHeight: 1.65,
     textAlign: "center",
     fontStyle: "italic",
+    maxWidth: 440,
   },
-  pageNumber: {
+  pageNumberBadge: {
     position: "absolute",
-    bottom: 8,
+    bottom: 10,
     right: 14,
-    color: "#9ca4ab",
-    fontSize: 8,
+    backgroundColor: "rgba(0,0,0,0.07)",
+    borderRadius: 10,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
   },
+  pageNumberText: {
+    color: "#9b8e82",
+    fontSize: 7,
+  },
+
+  // ── Back cover ───────────────────────────────────────────────
   backCover: {
+    width: PAGE_SIZE.width,
+    height: PAGE_SIZE.height,
     backgroundColor: "#1a0c06",
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    padding: 40,
+    padding: 48,
   },
-  backCoverTitle: {
+  backLogo: {
     color: "#ff723b",
-    fontSize: 20,
+    fontSize: 28,
     fontWeight: "bold",
-    textAlign: "center",
-    marginBottom: 12,
+    letterSpacing: 2,
+    marginBottom: 8,
   },
-  backCoverText: {
-    color: "rgba(255,255,255,0.6)",
+  backTagline: {
+    color: "rgba(255,255,255,0.5)",
     fontSize: 10,
     textAlign: "center",
-    lineHeight: 1.6,
+    lineHeight: 1.7,
+    marginBottom: 32,
+  },
+  backDivider: {
+    width: 40,
+    height: 2,
+    backgroundColor: "#ff723b",
+    borderRadius: 1,
+    marginBottom: 32,
+  },
+  backUrl: {
+    color: "rgba(255,255,255,0.3)",
+    fontSize: 9,
+    letterSpacing: 1,
+  },
+  backMade: {
+    position: "absolute",
+    bottom: 24,
+    color: "rgba(255,255,255,0.2)",
+    fontSize: 7,
+    letterSpacing: 1,
   },
 });
 
 function CoverPage({ title, childName }: { title: string; childName: string }) {
   return (
-    <Page size="A4" style={styles.coverPage}>
+    <Page size={[PAGE_SIZE.width, PAGE_SIZE.height]} style={styles.cover}>
+      <View style={styles.coverSpine} />
       <View style={styles.coverBadge}>
-        <Text style={styles.coverBadgeText}>ПРОИЗВЕДЕНО В БЪЛГАРИЯ</Text>
+        <Text style={styles.coverBadgeText}>HEROBOOK · БЪЛГАРИЯ</Text>
       </View>
+      <View style={styles.coverDecoration} />
       <Text style={styles.coverTitle}>{title}</Text>
       <Text style={styles.coverSubtitle}>Историята на {childName}</Text>
       <View style={styles.coverFooter}>
@@ -156,45 +222,50 @@ function CoverPage({ title, childName }: { title: string; childName: string }) {
 }
 
 function StoryPage({ page }: { page: BookPage }) {
+  const hasImage =
+    page.imageUrl &&
+    (page.imageUrl.startsWith("http") || page.imageUrl.startsWith("data:"));
+
   return (
-    <Page size="A4" style={styles.page}>
-      {/* Illustration area — 70% of page */}
-      <View style={[styles.illustrationArea, { height: "70%" }]}>
-        <View style={styles.illustrationPlaceholder}>
-          <View
-            style={{
-              flex: 1,
-              alignItems: "center",
-              justifyContent: "center",
-              padding: 20,
-            }}
-          >
-            <Text style={styles.illustrationText}>
-              Илюстрация — Страница {page.pageNumber}
+    <Page size={[PAGE_SIZE.width, PAGE_SIZE.height]} style={styles.page}>
+      {/* Illustration — 72% of page height */}
+      <View style={styles.illustrationArea}>
+        {hasImage ? (
+          <Image src={page.imageUrl!} style={styles.illustrationImage} />
+        ) : (
+          <View style={styles.illustrationFallback}>
+            <Text style={styles.illustrationFallbackText}>
+              Страница {page.pageNumber}
             </Text>
           </View>
-        </View>
+        )}
       </View>
 
-      {/* Text area */}
+      {/* Story text — bottom 28% */}
       <View style={styles.textArea}>
         <Text style={styles.storyText}>{page.textContent}</Text>
       </View>
 
-      <Text style={styles.pageNumber}>{page.pageNumber}</Text>
+      {/* Page number */}
+      <View style={styles.pageNumberBadge}>
+        <Text style={styles.pageNumberText}>{page.pageNumber}</Text>
+      </View>
     </Page>
   );
 }
 
 function BackCover() {
   return (
-    <Page size="A4" style={styles.backCover}>
-      <Text style={styles.backCoverTitle}>HeroBook</Text>
-      <Text style={styles.backCoverText}>
+    <Page size={[PAGE_SIZE.width, PAGE_SIZE.height]} style={styles.backCover}>
+      <Text style={styles.backLogo}>HeroBook</Text>
+      <Text style={styles.backTagline}>
         Персонализирани детски книжки{"\n"}
-        Произведено с любов в България{"\n\n"}
-        herobook.bg
+        с лицето на вашето дете{"\n"}
+        Произведено с любов в България
       </Text>
+      <View style={styles.backDivider} />
+      <Text style={styles.backUrl}>herobook.bg</Text>
+      <Text style={styles.backMade}>ПРОИЗВЕДЕНО В БЪЛГАРИЯ © 2026</Text>
     </Page>
   );
 }
@@ -205,6 +276,8 @@ function BookDocument({ storyTitle, childName, pages }: BookPdfProps) {
       title={storyTitle}
       author="HeroBook"
       subject={`Персонализирана книжка за ${childName}`}
+      creator="HeroBook · herobook.bg"
+      producer="HeroBook"
     >
       <CoverPage title={storyTitle} childName={childName} />
       {pages.map((page) => (
@@ -216,7 +289,10 @@ function BookDocument({ storyTitle, childName, pages }: BookPdfProps) {
 }
 
 export async function generateBookPdf(props: BookPdfProps): Promise<Buffer> {
-  const element = React.createElement(BookDocument, props) as ReactElement<DocumentProps>;
+  const element = React.createElement(
+    BookDocument,
+    props
+  ) as ReactElement<DocumentProps>;
   const instance = pdf(element);
   const blob = await instance.toBlob();
   const arrayBuffer = await blob.arrayBuffer();

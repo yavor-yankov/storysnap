@@ -34,7 +34,7 @@ export function HeroSection() {
             <motion.div
               initial={{ opacity: 0, y: 24 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.55, ease: easeOut, delay: 0 }}
+              transition={{ duration: 0.35, ease: easeOut, delay: 0 }}
               className="mb-5 inline-flex items-center gap-2 rounded-full bg-brand-orange/10 px-4 py-1.5"
             >
               <span className="h-2 w-2 animate-pulse rounded-full bg-brand-orange" />
@@ -47,7 +47,7 @@ export function HeroSection() {
             <motion.h1
               initial={{ opacity: 0, y: 24 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.55, ease: easeOut, delay: 0.1 }}
+              transition={{ duration: 0.35, ease: easeOut, delay: 0.05 }}
               className="text-4xl font-black leading-tight tracking-tight text-brand-brown sm:text-5xl lg:text-6xl"
             >
               Направи{" "}
@@ -68,7 +68,7 @@ export function HeroSection() {
             <motion.p
               initial={{ opacity: 0, y: 24 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.55, ease: easeOut, delay: 0.2 }}
+              transition={{ duration: 0.35, ease: easeOut, delay: 0.1 }}
               className="mt-5 max-w-lg text-lg leading-relaxed text-brand-brown-body"
             >
               Детето ви открива, че{" "}
@@ -81,7 +81,7 @@ export function HeroSection() {
             <motion.div
               initial={{ opacity: 0, y: 24 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.55, ease: easeOut, delay: 0.3 }}
+              transition={{ duration: 0.35, ease: easeOut, delay: 0.15 }}
               className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center"
             >
               <Link href="/stories">
@@ -108,7 +108,7 @@ export function HeroSection() {
             <motion.div
               initial={{ opacity: 0, y: 24 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.55, ease: easeOut, delay: 0.4 }}
+              transition={{ duration: 0.35, ease: easeOut, delay: 0.2 }}
               className="mt-8 flex flex-wrap items-center gap-4"
             >
               {badges.map(({ icon: Icon, text }) => (
@@ -126,7 +126,7 @@ export function HeroSection() {
           <motion.div
             initial={{ opacity: 0, scale: 0.95, x: 20 }}
             animate={{ opacity: 1, scale: 1, x: 0 }}
-            transition={{ duration: 0.7, ease: easeOut, delay: 0.15 }}
+            transition={{ duration: 0.4, ease: easeOut, delay: 0.05 }}
             className="relative flex items-center justify-center"
           >
             {/* Glow behind books */}

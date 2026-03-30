@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import { Nunito, Poppins } from "next/font/google";
 import "./globals.css";
-import { Header } from "@/components/layout/header";
-import { Footer } from "@/components/layout/footer";
+import { SiteShell } from "@/components/layout/site-shell";
 
 const nunito = Nunito({
   variable: "--font-nunito",
@@ -45,9 +44,7 @@ export default function RootLayout({
   return (
     <html lang="bg" className={`${nunito.variable} ${poppins.variable} h-full`}>
       <body className="min-h-full flex flex-col">
-        <Header />
-        <main className="flex-1">{children}</main>
-        <Footer />
+        <SiteShell>{children}</SiteShell>
       </body>
     </html>
   );

@@ -117,7 +117,7 @@ function OrderPageInner() {
     <div className="min-h-screen bg-brand-beige py-10">
       <div className="mx-auto max-w-xl px-4 sm:px-6">
         <motion.div
-          initial={{ opacity: 0, y: 16 }}
+          initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35 }}
         >

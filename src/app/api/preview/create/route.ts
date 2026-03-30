@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+
+export const maxDuration = 300; // 5 minutes for AI generation
 import { z } from "zod";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { generatePreviewPages } from "@/lib/ai/face-swap";
@@ -98,13 +100,19 @@ export async function POST(request: NextRequest) {
     // Generate pages (simulated delay for realism)
     await new Promise((r) => setTimeout(r, 1500));
 
-    const pages = await generatePreviewPages({
+    const rawPages = await generatePreviewPages({
       storySlug,
       storyId: story.id,
       portraitUrls: photoUrls,
       childName,
       pageCount: 5,
     });
+
+    const pages = rawPages.map((p) => ({
+      page_number: p.pageNumber,
+      image_url: p.imageUrl,
+      text_content: p.textContent,
+    }));
 
     return NextResponse.json({
       previewId,
