@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { MOCK_ADMIN_ORDERS, type AdminOrder } from "@/lib/admin-data";
 import { orderStore } from "@/app/api/stripe/webhook/route";
+import { requireAdminApi } from "@/lib/admin-auth";
 
 // Merge in-memory Stripe orders with mock seed for dev
 function getAllOrders(): AdminOrder[] {
@@ -22,12 +23,17 @@ function getAllOrders(): AdminOrder[] {
     updated_at: o.createdAt,
   }));
 
-  return [...stripeOrders, ...MOCK_ADMIN_ORDERS].sort(
+  // Only include mock orders in development — never in production
+  const mockOrders = process.env.NODE_ENV === "development" ? MOCK_ADMIN_ORDERS : [];
+  return [...stripeOrders, ...mockOrders].sort(
     (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
 }
 
 export async function GET(request: NextRequest) {
+  const authError = await requireAdminApi();
+  if (authError) return authError;
+
   const { searchParams } = new URL(request.url);
   const status = searchParams.get("status");
   const type = searchParams.get("type");

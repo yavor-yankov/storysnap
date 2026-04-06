@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Menu, X, BookOpen, ShoppingBag, User } from "lucide-react";
+import { Menu, BookOpen, ShoppingBag, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { UserNav } from "./user-nav";
 import { cn } from "@/lib/utils";
 
 const navLinks = [
@@ -43,16 +44,7 @@ export function Header() {
 
         {/* Desktop Actions */}
         <div className="hidden items-center gap-3 lg:flex">
-          <Link href="/auth/login">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="gap-2 rounded-xl font-semibold text-brand-brown-sub hover:bg-brand-gold/30"
-            >
-              <User className="h-4 w-4" />
-              Вход
-            </Button>
-          </Link>
+          <UserNav />
           <Link href="/stories">
             <Button
               size="sm"
@@ -87,15 +79,9 @@ export function Header() {
                 </Link>
               ))}
               <div className="my-4 h-px bg-brand-gold/40" />
-              <Link href="/auth/login" onClick={() => setOpen(false)}>
-                <Button
-                  variant="ghost"
-                  className="w-full justify-start gap-2 rounded-xl font-semibold text-brand-brown-sub"
-                >
-                  <User className="h-4 w-4" />
-                  Вход
-                </Button>
-              </Link>
+              <div onClick={() => setOpen(false)}>
+                <UserNav />
+              </div>
               <Link href="/stories" onClick={() => setOpen(false)}>
                 <Button className="mt-2 w-full rounded-[20px] bg-brand-orange font-bold text-white transition-all duration-200 hover:bg-brand-orange-hover">
                   <ShoppingBag className="mr-2 h-4 w-4" />

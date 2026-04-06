@@ -1,5 +1,6 @@
 import { Resend } from "resend";
 import { OrderConfirmationEmail, BookReadyEmail } from "./templates";
+import { resolveSignedPdfUrl } from "@/lib/pdf/signed-url";
 import React from "react";
 
 function getResend(): Resend | null {
@@ -17,6 +18,7 @@ interface OrderInfo {
   productType: string;
   amountCents: number;
   customerEmail: string;
+  sessionId?: string;
   pdfUrl?: string;
   status?: string;
 }
@@ -37,9 +39,19 @@ export async function sendOrderConfirmation({ order }: { order: OrderInfo }) {
 }
 
 export async function sendBookReady({ order }: { order: OrderInfo }) {
+  // Resolve a 7-day signed URL so the email button is a direct download link.
+  const directPdfUrl = await resolveSignedPdfUrl(
+    order.pdfUrl ?? null,
+    7 * 24 * 3600, // 7 days
+    order.childName,
+    order.storyTitle
+  );
+
+  const orderWithDirectUrl = { ...order, pdfUrl: directPdfUrl ?? order.pdfUrl };
+
   const resend = getResend();
   if (!resend) {
-    console.log(`[DEV] Book ready email to ${order.customerEmail}`, order.pdfUrl);
+    console.log(`[DEV] Book ready email to ${order.customerEmail}`, directPdfUrl ?? order.pdfUrl);
     return;
   }
 
@@ -47,6 +59,6 @@ export async function sendBookReady({ order }: { order: OrderInfo }) {
     from: FROM,
     to: order.customerEmail,
     subject: `Книжката на ${order.childName} е готова! 🎉`,
-    react: React.createElement(BookReadyEmail, { order }),
+    react: React.createElement(BookReadyEmail, { order: orderWithDirectUrl }),
   });
 }

@@ -20,6 +20,7 @@ interface OrderData {
 function SuccessPageInner() {
   const searchParams = useSearchParams();
   const sessionId = searchParams.get("session_id") ?? "";
+  const email = searchParams.get("email") ?? "";
   const [order, setOrder] = useState<OrderData | null>(null);
   const [polling, setPolling] = useState(true);
 
@@ -32,7 +33,10 @@ function SuccessPageInner() {
     const interval = setInterval(async () => {
       tries++;
       try {
-        const res = await fetch(`/api/orders/${sessionId}`);
+        const url = email
+          ? `/api/orders/${sessionId}?email=${encodeURIComponent(email)}`
+          : `/api/orders/${sessionId}`;
+        const res = await fetch(url);
         if (res.ok) {
           const data = await res.json();
           setOrder(data);
@@ -53,7 +57,10 @@ function SuccessPageInner() {
   }, [sessionId]);
 
   const isDigital = order?.productType === "digital";
+  const isPhysical = order?.productType === "physical";
   const isComplete = order?.status === "complete";
+  const isFailed = order?.status === "failed";
+  const timedOut = !polling && !order;
 
   return (
     <div className="flex min-h-[calc(100dvh-4rem)] items-center justify-center bg-brand-beige px-4 py-12">
@@ -101,13 +108,36 @@ function SuccessPageInner() {
 
           {/* Status */}
           <div className="mt-6">
-            {isDigital && polling && (
+            {/* Loading — order not yet fetched */}
+            {!order && polling && (
+              <div className="flex items-center justify-center gap-2 text-sm text-brand-brown-body">
+                <Loader2 className="h-4 w-4 animate-spin text-brand-orange" />
+                Зареждаме вашата поръчка...
+              </div>
+            )}
+
+            {/* Timed out / not found */}
+            {timedOut && (
+              <div className="rounded-xl bg-red-50 border border-red-200 p-4 text-sm">
+                <p className="font-semibold text-red-700">
+                  ⚠️ Поръчката не беше намерена
+                </p>
+                <p className="mt-1 text-red-600">
+                  Ако плащането мина успешно, книжката ви ще бъде изпратена на имейл. Проверете папката „Спам" или пишете на{" "}
+                  <a href="mailto:hello@herobook.bg" className="underline">hello@herobook.bg</a>.
+                </p>
+              </div>
+            )}
+
+            {/* Digital — generating */}
+            {isDigital && polling && order && (
               <div className="flex items-center justify-center gap-2 text-sm text-brand-brown-body">
                 <Loader2 className="h-4 w-4 animate-spin text-brand-orange" />
                 Генерираме книжката...
               </div>
             )}
 
+            {/* Digital — ready with PDF */}
             {isDigital && isComplete && order?.pdfUrl && !order.pdfUrl.startsWith("mock:") && (
               <a href={order.pdfUrl} target="_blank" rel="noopener noreferrer">
                 <Button className="w-full gap-2 rounded-[20px] bg-brand-orange font-bold text-white hover:bg-brand-orange-hover">
@@ -117,19 +147,32 @@ function SuccessPageInner() {
               </a>
             )}
 
+            {/* Digital — complete but no PDF URL */}
             {isDigital && isComplete && (!order?.pdfUrl || order.pdfUrl.startsWith("mock:")) && (
               <div className="rounded-xl bg-brand-yellow-light p-4 text-sm">
                 <p className="font-semibold text-brand-brown">
                   📬 Проверете имейла си!
                 </p>
                 <p className="mt-1 text-brand-brown-body">
-                  Изпратихме книжката на вашия имейл. Моля, проверете и папката
-                  „Спам".
+                  Изпратихме книжката на вашия имейл. Моля, проверете и папката „Спам".
                 </p>
               </div>
             )}
 
-            {!isDigital && (
+            {/* Digital — failed */}
+            {isDigital && isFailed && (
+              <div className="rounded-xl bg-red-50 border border-red-200 p-4 text-sm">
+                <p className="font-semibold text-red-700">❌ Възникна грешка</p>
+                <p className="mt-1 text-red-600">
+                  Не успяхме да генерираме книжката. Свържете се с нас на{" "}
+                  <a href="mailto:hello@herobook.bg" className="underline">hello@herobook.bg</a>{" "}
+                  с номера на поръчката и ще я генерираме ръчно.
+                </p>
+              </div>
+            )}
+
+            {/* Physical */}
+            {isPhysical && (
               <div className="rounded-xl bg-brand-teal-light p-4 text-sm">
                 <p className="font-semibold text-brand-teal">
                   📦 Подготвяме за изпращане

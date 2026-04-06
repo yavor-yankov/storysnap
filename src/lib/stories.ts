@@ -2,10 +2,10 @@
 
 import type { Story } from "@/types";
 
-// Static seed data matching supabase/schema.sql (used when Supabase is not configured)
+// Static seed data — IDs match the Supabase stories table UUIDs exactly.
 export const STORIES_SEED: Story[] = [
   {
-    id: "1",
+    id: "4e5f7f6c-e5b0-42e1-ac5f-f9ef2dab66e9",
     title: "Космическото приключение",
     slug: "kosmichesko-priklyuchenie",
     description:
@@ -22,7 +22,7 @@ export const STORIES_SEED: Story[] = [
     created_at: new Date().toISOString(),
   },
   {
-    id: "2",
+    id: "f77bcb04-77f1-4b03-968e-c5696303c181",
     title: "Принцесата от Изгрева",
     slug: "printsesata-ot-izgreva",
     description:
@@ -39,7 +39,7 @@ export const STORIES_SEED: Story[] = [
     created_at: new Date().toISOString(),
   },
   {
-    id: "3",
+    id: "7f3e08a9-0dc6-4de6-8684-8a05c140977c",
     title: "Суперхеройски ден",
     slug: "supergerojski-den",
     description:
@@ -56,7 +56,7 @@ export const STORIES_SEED: Story[] = [
     created_at: new Date().toISOString(),
   },
   {
-    id: "4",
+    id: "cbce4292-d440-4baa-ab4e-23bab019514a",
     title: "В джунглата на приятелите",
     slug: "v-dzhunglata-na-priyatelite",
     description:
@@ -73,7 +73,7 @@ export const STORIES_SEED: Story[] = [
     created_at: new Date().toISOString(),
   },
   {
-    id: "5",
+    id: "184d1603-ff5e-430a-a2b8-a261a13e8ad4",
     title: "Малкият готвач",
     slug: "malkiyat-gotvach",
     description:
@@ -90,7 +90,7 @@ export const STORIES_SEED: Story[] = [
     created_at: new Date().toISOString(),
   },
   {
-    id: "6",
+    id: "2e87ee05-2089-4100-a6d0-8f44858b5124",
     title: "Пиратите на Черно море",
     slug: "piratite-na-cherno-more",
     description:
@@ -107,7 +107,7 @@ export const STORIES_SEED: Story[] = [
     created_at: new Date().toISOString(),
   },
   {
-    id: "7",
+    id: "10650c84-be58-43a3-9734-a6745375dea5",
     title: "Феята на горите",
     slug: "feyata-na-gorite",
     description:
@@ -124,7 +124,7 @@ export const STORIES_SEED: Story[] = [
     created_at: new Date().toISOString(),
   },
   {
-    id: "8",
+    id: "7c9a200a-239a-4479-9f45-ed38e1dcc775",
     title: "Динозавърът приятел",
     slug: "dinozavarat-priyatel",
     description:

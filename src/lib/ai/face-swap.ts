@@ -263,37 +263,95 @@ function getPageText(storySlug: string, pageNum: number, childName: string): str
   return template.replace(/{name}/g, childName);
 }
 
-// ─── HuggingFace generation ──────────────────────────────────────────────────
+// ─── Story-specific scene context per page ───────────────────────────────────
 
-const STORY_STYLES: Record<string, string> = {
-  "kosmichesko-priklyuchenie": "outer space, stars, rocket ship, cosmic adventure",
-  "printsesata-ot-izgreva": "enchanted forest, sunrise, magical kingdom, princess",
-  "supergerojski-den": "superhero city, flying, cape, skyscrapers",
-  "v-dzhunglata-na-priyatelite": "tropical jungle, friendly animals, colorful birds",
-  "malkiyat-gotvach": "cozy kitchen, cooking, delicious food, chef hat",
-  "piratite-na-cherno-more": "pirate ship, ocean, treasure map, adventure",
-  "feyata-na-gorite": "magical forest, fairies, glowing flowers, enchanted",
-  "dinozavarat-priyatel": "prehistoric world, friendly dinosaur, lush jungle",
+const STORY_STYLES: Record<string, { scene: string; palette: string; mood: string }> = {
+  "kosmichesko-priklyuchenie": {
+    scene: "outer space adventure, colorful nebulas, rocket ship, alien planets, floating stars and moons",
+    palette: "deep indigo and purple sky, golden stars, bright teal accents, warm orange spaceship",
+    mood: "exciting, wonder, cosmic magic",
+  },
+  "printsesata-ot-izgreva": {
+    scene: "magical sunrise kingdom, enchanted forest, golden morning light, castle towers, talking animals",
+    palette: "warm rose and gold sunrise, soft lavender shadows, emerald green leaves, pearl white castle",
+    mood: "warm, magical, gentle, fairy tale",
+  },
+  "supergerojski-den": {
+    scene: "bright colorful city, superhero flying above rooftops, cape flowing in wind, sunny day",
+    palette: "vivid blue sky, bold primary colors, gleaming city buildings, warm sunlight",
+    mood: "heroic, energetic, fun, triumphant",
+  },
+  "v-dzhunglata-na-priyatelite": {
+    scene: "lush tropical jungle, friendly exotic animals, waterfall, rainbow, giant colorful flowers",
+    palette: "vibrant emerald and lime greens, tropical orange and pink flowers, warm golden light",
+    mood: "playful, adventurous, warm, friendship",
+  },
+  "malkiyat-gotvach": {
+    scene: "cozy magical kitchen, huge colorful cakes and pastries, chef hat, wooden spoon, bubbling pots",
+    palette: "warm terracotta and cream kitchen, colorful pastries, soft golden candlelight",
+    mood: "cozy, joyful, delicious, homey",
+  },
+  "piratite-na-cherno-more": {
+    scene: "pirate ship on glittering ocean, treasure chest, treasure map, seagulls, dramatic sunset sky",
+    palette: "deep teal sea, warm orange and gold sunset, weathered wood browns, bright white sails",
+    mood: "adventurous, dramatic, exciting, treasure hunt",
+  },
+  "feyata-na-gorite": {
+    scene: "glowing enchanted forest, tiny fairies with light wings, fireflies, glowing mushrooms, moonlight",
+    palette: "moonlit silver and deep forest green, glowing golden fairy light, soft purple shadows",
+    mood: "magical, serene, mysterious, enchanting",
+  },
+  "dinozavarat-priyatel": {
+    scene: "lush prehistoric jungle, friendly cute baby dinosaur, giant ferns, tropical flowers, blue sky",
+    palette: "rich jungle greens, warm earthy browns, bright blue sky, vivid tropical flowers",
+    mood: "playful, warm, adventurous, heartwarming friendship",
+  },
 };
+
+const BASE_STYLE =
+  "beautiful children's book illustration, professional watercolor and digital art style, " +
+  "soft painterly textures, gentle brushstrokes, warm light, rich detailed background, " +
+  "cute cartoon-realistic child character, expressive big eyes, rounded shapes, " +
+  "award-winning picture book quality, Pixar-inspired warmth, full composition, no text";
+
+const NEGATIVE_PROMPT =
+  "ugly, deformed, blurry, low quality, bad anatomy, extra limbs, realistic photo, " +
+  "dark, scary, horror, violence, adult content, text, watermark, signature, logo, " +
+  "cropped, out of frame, grainy, oversaturated, harsh lighting";
 
 async function generateWithHuggingFace(params: {
   childName: string;
   pageNumber: number;
   storySlug: string;
   isPreview: boolean;
+  customPrompt?: string;
 }): Promise<string> {
   const hf = new HfInference(process.env.HF_TOKEN);
-  const storyContext = STORY_STYLES[params.storySlug] ?? "magical adventure, fairy tale";
+  const style = STORY_STYLES[params.storySlug] ?? {
+    scene: "magical fairy tale adventure",
+    palette: "soft pastel rainbow colors",
+    mood: "warm, whimsical, magical",
+  };
 
-  const prompt = `children's book illustration, watercolor style, cute child hero, ${storyContext}, page ${params.pageNumber}, soft pastel colors, whimsical, adorable, high quality storybook art, no text`;
+  const prompt = params.customPrompt ?? (
+    `${BASE_STYLE}, ` +
+    `${style.scene}, ` +
+    `${style.palette}, ` +
+    `${style.mood} atmosphere, ` +
+    `adorable child hero named ${params.childName}, ` +
+    `storybook page ${params.pageNumber}, ` +
+    `children's picture book spread, square format`
+  );
 
   const result = await hf.textToImage({
     model: "stabilityai/stable-diffusion-xl-base-1.0",
     inputs: prompt,
     parameters: {
-      negative_prompt: "ugly, blurry, low quality, realistic photo, dark, scary, adult, violence, text, watermark",
-      num_inference_steps: params.isPreview ? 20 : 30,
-      guidance_scale: 7,
+      negative_prompt: NEGATIVE_PROMPT,
+      num_inference_steps: params.isPreview ? 25 : 40,
+      guidance_scale: 8.5,
+      width: 1024,
+      height: 1024,
     },
   });
 
@@ -311,19 +369,31 @@ async function generateWithFal(params: {
   pageNumber: number;
   storySlug: string;
   isPreview: boolean;
+  customPrompt?: string;
 }): Promise<string> {
   fal.config({ credentials: process.env.FAL_KEY });
-  const storyContext = STORY_STYLES[params.storySlug] ?? "magical adventure";
+  const style = STORY_STYLES[params.storySlug] ?? {
+    scene: "magical fairy tale adventure",
+    palette: "soft pastel rainbow colors",
+    mood: "warm, whimsical, magical",
+  };
 
-  const prompt = `children's book illustration, watercolor style, a child named ${params.childName} as the main hero, ${storyContext}, page ${params.pageNumber}, soft pastel colors, whimsical, cute, high quality storybook art`;
+  const prompt = params.customPrompt ?? (
+    `${BASE_STYLE}, ` +
+    `${style.scene}, ` +
+    `${style.palette}, ` +
+    `${style.mood} atmosphere, ` +
+    `child hero ${params.childName} as main character, ` +
+    `storybook page ${params.pageNumber}, square format`
+  );
 
   const result = (await fal.subscribe("fal-ai/ip-adapter-face-id", {
     input: {
       prompt,
-      negative_prompt: "ugly, blurry, low quality, realistic, photo, adult, dark, scary",
+      negative_prompt: NEGATIVE_PROMPT,
       face_image_url: params.portraitUrl,
-      num_inference_steps: params.isPreview ? 20 : 28,
-      guidance_scale: 7.5,
+      num_inference_steps: params.isPreview ? 25 : 35,
+      guidance_scale: 8.0,
     },
     logs: false,
   })) as unknown as { images: { url: string }[] };
@@ -333,26 +403,38 @@ async function generateWithFal(params: {
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
+/**
+ * generatePreviewPages — 5 pages, used on /create before payment.
+ * Accepts pre-generated story pages (with imagePrompts) from the story generator,
+ * or falls back to PAGE_TEXTS + auto-built prompts.
+ */
 export async function generatePreviewPages(params: {
   storySlug: string;
   storyId: string;
   portraitUrls: string[];
   childName: string;
   pageCount?: number;
+  storyPages?: Array<{ pageNumber: number; storyText: string; imagePrompt: string }>;
 }): Promise<FaceSwapResult[]> {
-  const { storySlug, childName, portraitUrls, pageCount = 5 } = params;
-  return runGeneration({ storySlug, childName, portraitUrls, pageCount, isPreview: true });
+  const { storySlug, childName, portraitUrls, pageCount = 5, storyPages } = params;
+  return runGeneration({ storySlug, childName, portraitUrls, pageCount, isPreview: true, storyPages });
 }
 
+/**
+ * generateFullPages — 24 pages, called from the Stripe webhook after payment.
+ */
 export async function generateFullPages(params: {
   storySlug: string;
   storyId: string;
   portraitUrls: string[];
   childName: string;
+  storyPages?: Array<{ pageNumber: number; storyText: string; imagePrompt: string }>;
 }): Promise<FaceSwapResult[]> {
-  const { storySlug, childName, portraitUrls } = params;
-  return runGeneration({ storySlug, childName, portraitUrls, pageCount: 24, isPreview: false });
+  const { storySlug, childName, portraitUrls, storyPages } = params;
+  return runGeneration({ storySlug, childName, portraitUrls, pageCount: 24, isPreview: false, storyPages });
 }
+
+// ─── Provider priority: Replicate → fal.ai → HuggingFace → mock ──────────────
 
 async function runGeneration(params: {
   storySlug: string;
@@ -360,61 +442,133 @@ async function runGeneration(params: {
   portraitUrls: string[];
   pageCount: number;
   isPreview: boolean;
+  storyPages?: Array<{ pageNumber: number; storyText: string; imagePrompt: string }>;
 }): Promise<FaceSwapResult[]> {
-  const { storySlug, childName, portraitUrls, pageCount, isPreview } = params;
+  const { storySlug, childName, portraitUrls, pageCount, isPreview, storyPages } = params;
 
-  const hasFal = !!process.env.FAL_KEY;
-  const hasHf = !!process.env.HF_TOKEN;
+  const hasReplicate = !!process.env.REPLICATE_API_TOKEN;
+  const hasFal       = !!process.env.FAL_KEY;
+  const hasHf        = !!process.env.HF_TOKEN;
+  const portraitUrl  = portraitUrls[0] ?? "";
+
+  // Base seed keeps character consistent; per-page offset varies composition
+  const baseSeed = Math.floor(Math.random() * 900_000) + 1000;
 
   const pageNumbers = Array.from({ length: pageCount }, (_, i) => i + 1);
 
-  const pages = await Promise.all(
-    pageNumbers.map(async (i) => {
-      try {
-        let imageUrl: string;
+  // ── Helper: get text + imagePrompt for a page ──────────────────────────────
+  function getPageData(pageNum: number): { storyText: string; imagePrompt: string } {
+    const pre = storyPages?.find((p) => p.pageNumber === pageNum);
+    if (pre) return { storyText: pre.storyText, imagePrompt: pre.imagePrompt };
 
-        if (hasFal) {
-          // Try fal.ai first (has face swap)
-          imageUrl = await generateWithFal({
-            portraitUrl: portraitUrls[0],
-            childName,
-            pageNumber: i,
-            storySlug,
-            isPreview,
-          });
-        } else if (hasHf) {
-          // Fall back to HuggingFace (no face swap but free)
-          imageUrl = await generateWithHuggingFace({ childName, pageNumber: i, storySlug, isPreview });
-        } else {
-          imageUrl = `mock:page:${storySlug}:${i}:${isPreview ? "preview" : "full"}`;
-        }
+    const storyText = getPageText(storySlug, pageNum, childName);
+    const style = STORY_STYLES[storySlug] ?? {
+      scene: "magical adventure",
+      palette: "soft pastel colours",
+      mood: "warm, whimsical",
+    };
+    const imagePrompt =
+      `Page ${pageNum}: ${storyText.replace(new RegExp(childName, "gi"), "the child").slice(0, 200)}. ` +
+      `Setting: ${style.scene}. Colour palette: ${style.palette}. Mood: ${style.mood} atmosphere. ` +
+      `The same child character maintaining exact face from reference portrait photo appears as hero. ` +
+      BASE_STYLE;
 
-        return {
-          pageNumber: i,
-          imageUrl,
-          textContent: getPageText(storySlug, i, childName),
-        };
-      } catch (err) {
-        console.error(`Generation failed for page ${i}, falling back:`, err);
+    return { storyText, imagePrompt };
+  }
 
-        // fal.ai failed — try HuggingFace as fallback
-        if (hasHf) {
-          try {
-            const imageUrl = await generateWithHuggingFace({ childName, pageNumber: i, storySlug, isPreview });
-            return { pageNumber: i, imageUrl, textContent: getPageText(storySlug, i, childName) };
-          } catch (hfErr) {
-            console.error(`HuggingFace also failed for page ${i}:`, hfErr);
-          }
-        }
+  // ── Replicate path (primary) ───────────────────────────────────────────────
+  if (hasReplicate) {
+    console.log(`[Generation] Using Replicate (${process.env.REPLICATE_MODEL ?? "flux-kontext-dev"})`);
+    try {
+      const { generateReplicatePages } = await import("@/lib/ai/replicate");
+      const inputs = pageNumbers.map((i) => {
+        const { imagePrompt } = getPageData(i);
+        // Each page gets a unique seed offset so compositions differ while character stays consistent
+        const seed = baseSeed + i * 37;
+        return { prompt: imagePrompt, portraitUrl: portraitUrl || undefined, pageNumber: i, seed, isPreview };
+      });
 
-        return {
-          pageNumber: i,
-          imageUrl: `mock:page:${storySlug}:${i}:${isPreview ? "preview" : "full"}`,
-          textContent: getPageText(storySlug, i, childName),
-        };
+      const batchSize = isPreview ? 5 : 6;
+      const results = await generateReplicatePages(inputs, batchSize);
+
+      // Ensure all imageUrls are strings (Replicate SDK can return URL objects)
+      const normalizedResults = results.map((r) => ({
+        ...r,
+        imageUrl: typeof r.imageUrl === "string"
+          ? r.imageUrl
+          : typeof (r.imageUrl as unknown as { toString: () => string })?.toString === "function"
+            ? (r.imageUrl as unknown as { toString: () => string }).toString()
+            : `mock:replicate-error:${r.pageNumber}`,
+      }));
+
+      // If ALL pages failed (e.g. 402 no credits), fall through to next provider
+      const allFailed = normalizedResults.every((r) => r.imageUrl.startsWith("mock:replicate-error"));
+      if (allFailed) {
+        console.warn("[Generation] Replicate returned all errors — falling through to next provider");
+        throw new Error("All Replicate pages failed");
       }
-    })
-  );
 
-  return pages.sort((a, b) => a.pageNumber - b.pageNumber);
+      return normalizedResults.map((r) => ({
+        pageNumber: r.pageNumber,
+        imageUrl: r.imageUrl,
+        textContent: getPageData(r.pageNumber).storyText,
+      })).sort((a, b) => a.pageNumber - b.pageNumber);
+    } catch (err) {
+      console.error("[Generation] Replicate failed, falling back to fal.ai:", err);
+    }
+  }
+
+  // ── fal.ai path (secondary) ────────────────────────────────────────────────
+  if (hasFal) {
+    console.log("[Generation] Using fal.ai (ip-adapter-face-id)");
+    try {
+      const pages = await Promise.all(
+        pageNumbers.map(async (i) => {
+          const { storyText, imagePrompt } = getPageData(i);
+          try {
+            const imageUrl = await generateWithFal({
+              portraitUrl,
+              childName,
+              pageNumber: i,
+              storySlug,
+              isPreview,
+              customPrompt: imagePrompt,
+            });
+            return { pageNumber: i, imageUrl, textContent: storyText };
+          } catch (falErr) {
+            console.error(`[Generation] fal.ai page ${i} failed:`, falErr);
+            return { pageNumber: i, imageUrl: `mock:fal-error:${i}`, textContent: storyText };
+          }
+        })
+      );
+      return pages.sort((a, b) => a.pageNumber - b.pageNumber);
+    } catch (err) {
+      console.error("[Generation] fal.ai failed, falling back to HuggingFace:", err);
+    }
+  }
+
+  // ── HuggingFace path (free fallback) ───────────────────────────────────────
+  if (hasHf) {
+    console.log("[Generation] Using HuggingFace SDXL (free, no face-swap)");
+    const pages = await Promise.all(
+      pageNumbers.map(async (i) => {
+        const { storyText, imagePrompt } = getPageData(i);
+        try {
+          const imageUrl = await generateWithHuggingFace({ childName, pageNumber: i, storySlug, isPreview, customPrompt: imagePrompt });
+          return { pageNumber: i, imageUrl, textContent: storyText };
+        } catch {
+          return { pageNumber: i, imageUrl: `mock:hf-error:${i}`, textContent: storyText };
+        }
+      })
+    );
+    return pages.sort((a, b) => a.pageNumber - b.pageNumber);
+  }
+
+  // ── Mock path (no API keys) ────────────────────────────────────────────────
+  console.log("[Generation] No AI keys configured — using mock placeholders");
+  return pageNumbers.map((i) => ({
+    pageNumber: i,
+    imageUrl: `mock:page:${storySlug}:${i}:${isPreview ? "preview" : "full"}`,
+    textContent: getPageData(i).storyText,
+  }));
 }

@@ -234,6 +234,89 @@ create policy "Users can read own generated pages"
   using (exists (select 1 from public.orders o where o.id = order_id and o.user_id = auth.uid()));
 
 -- ============================================================
+-- STORAGE BUCKETS
+-- ============================================================
+
+-- Run these in Supabase Dashboard → Storage → New Bucket
+-- OR via SQL:
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values
+  ('portraits', 'portraits', true, 10485760, ARRAY['image/jpeg','image/png','image/webp'])
+on conflict (id) do nothing;
+
+-- pdfs bucket is PRIVATE — signed URLs are used for access (issue #5)
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values
+  ('pdfs', 'pdfs', false, 52428800, ARRAY['application/pdf'])
+on conflict (id) do update set public = false;
+
+-- Storage RLS: only the service role (server-side) can read/write
+-- Anon/authenticated users have no direct storage access — they get signed URLs via API
+create policy "Service role can manage portraits"
+  on storage.objects for all
+  using (bucket_id = 'portraits');
+
+create policy "Service role can manage pdfs"
+  on storage.objects for all
+  using (bucket_id = 'pdfs');
+
+-- Prevent anon users from listing or reading objects directly
+-- (The service role policies above take precedence for server-side code;
+--  these explicit denials make intent clear and guard against misconfiguration)
+create policy "Anon cannot read portraits"
+  on storage.objects for select
+  using (bucket_id = 'portraits' and auth.role() != 'anon');
+
+create policy "Anon cannot read pdfs"
+  on storage.objects for select
+  using (bucket_id = 'pdfs' and auth.role() != 'anon');
+
+-- ============================================================
+-- RATE LIMITING (persistent, survives serverless cold starts)
+-- ============================================================
+create table if not exists public.ip_rate_limits (
+  key       text primary key,
+  count     int  not null default 1,
+  reset_at  timestamptz not null
+);
+create index if not exists ip_rate_limits_reset_at on public.ip_rate_limits (reset_at);
+
+-- Atomic upsert function called by the app's rate-limit module.
+-- Returns { count, reset_at, allowed } for the current window.
+create or replace function public.upsert_rate_limit(
+  p_key      text,
+  p_limit    int,
+  p_reset_at timestamptz
+) returns jsonb
+language plpgsql
+security definer
+as $$
+declare
+  v_count   int;
+  v_reset   timestamptz;
+  v_allowed boolean;
+begin
+  -- Delete expired entry for this key so we get a fresh window
+  delete from public.ip_rate_limits where key = p_key and reset_at < now();
+
+  -- Upsert: insert new row or increment existing
+  insert into public.ip_rate_limits (key, count, reset_at)
+  values (p_key, 1, p_reset_at)
+  on conflict (key) do update
+    set count = ip_rate_limits.count + 1
+  returning count, reset_at into v_count, v_reset;
+
+  v_allowed := v_count <= p_limit;
+  return jsonb_build_object('count', v_count, 'reset_at', v_reset, 'allowed', v_allowed);
+end;
+$$;
+
+-- Only the service role can write rate limit counters; anon cannot read/modify
+alter table public.ip_rate_limits enable row level security;
+-- No RLS policies needed: service role bypasses RLS; anon has no access
+
+-- ============================================================
 -- SEED: Sample stories
 -- ============================================================
 insert into public.stories (title, slug, description, age_min, age_max, gender, page_count, cover_image_url, preview_images, is_active, is_new, sort_order)

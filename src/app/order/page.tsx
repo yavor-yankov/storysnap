@@ -28,6 +28,7 @@ function OrderPageInner() {
   const searchParams = useSearchParams();
   const storySlug = searchParams.get("story") ?? "";
   const productType = (searchParams.get("type") ?? "digital") as ProductType;
+  const previewId = searchParams.get("preview") ?? "";
   const story = getStoryBySlug(storySlug);
 
   const price = PRICES[productType];
@@ -82,6 +83,7 @@ function OrderPageInner() {
           productType,
           email: form.email,
           childName: form.childName,
+          previewId: previewId || undefined,
           shippingAddress:
             productType === "physical"
               ? {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { MOCK_ADMIN_ORDERS } from "@/lib/admin-data";
 import { orderStore } from "@/app/api/stripe/webhook/route";
+import { requireAdminApi } from "@/lib/admin-auth";
 import { z } from "zod";
 
 // In-memory patch store for mock orders (dev)
@@ -18,6 +19,9 @@ interface Params {
 }
 
 export async function GET(_req: NextRequest, { params }: Params) {
+  const authError = await requireAdminApi();
+  if (authError) return authError;
+
   const { id } = await params;
 
   // Check Stripe orderStore first
@@ -39,6 +43,9 @@ export async function GET(_req: NextRequest, { params }: Params) {
 }
 
 export async function PATCH(request: NextRequest, { params }: Params) {
+  const authError = await requireAdminApi();
+  if (authError) return authError;
+
   const { id } = await params;
   const body = await request.json();
   const parsed = patchSchema.safeParse(body);

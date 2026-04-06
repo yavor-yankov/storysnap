@@ -2,12 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { z } from "zod";
 import { getStoryBySlug } from "@/lib/stories";
+import { createServiceClient } from "@/lib/supabase/server";
 
 const schema = z.object({
   storySlug: z.string().min(1),
   productType: z.enum(["digital", "physical"]),
   email: z.string().email(),
   childName: z.string().min(1).max(50),
+  previewId: z.string().uuid().optional(),
+  childAge: z.number().int().min(1).max(12).optional(),
+  childGender: z.enum(["boy", "girl", "unisex"]).optional(),
   shippingAddress: z
     .object({
       name: z.string(),
@@ -42,11 +46,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Невалидни данни." }, { status: 400 });
     }
 
-    const { storySlug, productType, email, childName, shippingAddress } = parsed.data;
+    const { storySlug, productType, email, childName, previewId, childAge, childGender, shippingAddress } = parsed.data;
 
     const story = getStoryBySlug(storySlug);
     if (!story) {
       return NextResponse.json({ error: "Книжката не е намерена." }, { status: 404 });
+    }
+
+    // Fetch portrait URLs from preview request (if we have a previewId)
+    let portraitUrls: string[] = [];
+    if (previewId) {
+      try {
+        const supabase = createServiceClient();
+        const { data: preview } = await supabase
+          .from("preview_requests")
+          .select("photo_urls")
+          .eq("id", previewId)
+          .single();
+        if (preview?.photo_urls) {
+          portraitUrls = preview.photo_urls;
+        }
+      } catch (e) {
+        console.warn("Could not fetch preview portrait URLs:", e);
+      }
     }
 
     const price = PRICES[productType];
@@ -76,9 +98,14 @@ export async function POST(request: NextRequest) {
         productType,
         childName,
         customerEmail: email,
+        previewId: previewId ?? "",
+        childAge: String(childAge ?? 4),
+        childGender: childGender ?? "unisex",
+        // Portrait URLs are fetched in the webhook via previewId (reliable Supabase path).
+        // Removed portraitUrlsJson: it was silently truncated at 490 chars causing lost portraits.
         shippingAddress: shippingAddress ? JSON.stringify(shippingAddress) : "",
       },
-      success_url: `${appUrl}/order/success?session_id={CHECKOUT_SESSION_ID}`,
+      success_url: `${appUrl}/order/success?session_id={CHECKOUT_SESSION_ID}&email=${encodeURIComponent(email)}`,
       cancel_url: `${appUrl}/order?story=${storySlug}&type=${productType}`,
       payment_method_types: ["card"],
       ...(productType === "physical"

@@ -78,6 +78,7 @@ interface OrderInfo {
   productType: string;
   amountCents: number;
   customerEmail: string;
+  sessionId?: string;
   pdfUrl?: string;
 }
 
@@ -139,6 +140,14 @@ export function OrderConfirmationEmail({ order }: { order: OrderInfo }) {
 export function BookReadyEmail({ order }: { order: OrderInfo }) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://herobook.bg";
 
+  // pdfUrl is a pre-resolved 7-day signed URL set by sendBookReady().
+  // Fall back to dashboard if somehow missing.
+  const downloadUrl = order.pdfUrl && !order.pdfUrl.startsWith("supabase-storage:")
+    ? order.pdfUrl
+    : order.sessionId
+      ? `${appUrl}/order/success?session_id=${order.sessionId}&email=${encodeURIComponent(order.customerEmail)}`
+      : `${appUrl}/dashboard`;
+
   return (
     <Html lang="bg">
       <Head />
@@ -156,15 +165,9 @@ export function BookReadyEmail({ order }: { order: OrderInfo }) {
             Кликнете на бутона по-долу, за да я изтеглите.
           </Text>
 
-          {order.pdfUrl && !order.pdfUrl.startsWith("mock:") ? (
-            <Button href={order.pdfUrl} style={cta}>
-              📄 Изтегли книжката (PDF)
-            </Button>
-          ) : (
-            <Button href={`${appUrl}/dashboard`} style={cta}>
-              📄 Виж поръчката в профила ти
-            </Button>
-          )}
+          <Button href={downloadUrl} style={cta}>
+            📄 Изтегли книжката (PDF)
+          </Button>
 
           <Text style={{ ...paragraph, marginTop: "20px" }}>
             Препоръчваме да отпечатате книжката на качествена хартия за

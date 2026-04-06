@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export const maxDuration = 300; // 5 minutes for AI generation
+
 import { z } from "zod";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { generatePreviewPages } from "@/lib/ai/face-swap";
+import { generateStory } from "@/lib/story/generator";
 import { getStoryBySlug } from "@/lib/stories";
+import { createServiceClient } from "@/lib/supabase/server";
 
 const schema = z.object({
   email: z.string().email(),
@@ -12,13 +15,13 @@ const schema = z.object({
   storySlug: z.string().min(1),
   photoUrls: z.array(z.string()).min(1).max(2),
   turnstileToken: z.string().optional(),
+  childAge: z.number().int().min(1).max(12).optional(),
+  childGender: z.enum(["boy", "girl", "unisex"]).optional(),
 });
 
 const PREVIEW_LIMIT_PER_EMAIL = 2;
 const IP_LIMIT_PER_HOUR = 5;
-
-// In-memory email tracking (use Supabase in production for persistence)
-const emailPreviewCounts = new Map<string, number>();
+const PREVIEW_PAGE_COUNT = 5;
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,13 +29,10 @@ export async function POST(request: NextRequest) {
     const parsed = schema.safeParse(body);
 
     if (!parsed.success) {
-      return NextResponse.json(
-        { error: "Невалидни данни." },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Невалидни данни." }, { status: 400 });
     }
 
-    const { email, childName, storySlug, photoUrls, turnstileToken } = parsed.data;
+    const { email, childName, storySlug, photoUrls, turnstileToken, childAge, childGender } = parsed.data;
 
     // 1. Verify Turnstile CAPTCHA (if configured)
     const turnstileSecret = process.env.TURNSTILE_SECRET_KEY;
@@ -54,13 +54,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 2. IP rate limit (5 previews per hour per IP)
+    // 2. IP rate limit
     const ip =
       request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
       request.headers.get("x-real-ip") ??
       "unknown";
 
-    const ipCheck = checkRateLimit(`preview:ip:${ip}`, IP_LIMIT_PER_HOUR, 60 * 60 * 1000);
+    const ipCheck = await checkRateLimit(`preview:ip:${ip}`, IP_LIMIT_PER_HOUR, 60 * 60 * 1000);
     if (!ipCheck.allowed) {
       return NextResponse.json(
         {
@@ -71,41 +71,89 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 3. Email preview limit (2 per email lifetime)
-    // In production, check Supabase preview_requests table
-    const emailCount = emailPreviewCounts.get(email.toLowerCase()) ?? 0;
-    if (emailCount >= PREVIEW_LIMIT_PER_EMAIL) {
-      return NextResponse.json(
-        {
-          error:
-            "Достигнахте лимита от 2 безплатни прегледа на имейл. Закупете книжката, за да продължите.",
-          limitReached: true,
-        },
-        { status: 403 }
-      );
-    }
-
-    // 4. Get story
+    // 3. Lookup story
     const story = getStoryBySlug(storySlug);
     if (!story) {
       return NextResponse.json({ error: "Книжката не е намерена." }, { status: 404 });
     }
 
-    // 5. Generate preview pages (mock or real Replicate)
-    const previewId = crypto.randomUUID();
+    // 4. Email preview limit (Supabase — persistent)
+    // PREVIEW_BYPASS_EMAILS: comma-separated emails that skip the limit (DEV ONLY)
+    const bypassEmails = (process.env.PREVIEW_BYPASS_EMAILS ?? "")
+      .split(",").map((e) => e.trim().toLowerCase()).filter(Boolean);
+    const emailBypassed = bypassEmails.includes(email.toLowerCase());
 
-    // Update email count
-    emailPreviewCounts.set(email.toLowerCase(), emailCount + 1);
+    const supabase = createServiceClient();
+    let emailCount = 0;
+    let remainingPreviews = PREVIEW_LIMIT_PER_EMAIL;
 
-    // Generate pages (simulated delay for realism)
-    await new Promise((r) => setTimeout(r, 1500));
+    if (!emailBypassed) {
+      try {
+        const { count } = await supabase
+          .from("preview_requests")
+          .select("*", { count: "exact", head: true })
+          .eq("email", email.toLowerCase())
+          .eq("status", "complete");
 
+        emailCount = count ?? 0;
+        if (emailCount >= PREVIEW_LIMIT_PER_EMAIL) {
+          return NextResponse.json(
+            {
+              error: "Достигнахте лимита от 2 безплатни прегледа. Закупете книжката, за да продължите.",
+              limitReached: true,
+            },
+            { status: 403 }
+          );
+        }
+        remainingPreviews = PREVIEW_LIMIT_PER_EMAIL - emailCount - 1;
+      } catch (dbErr) {
+        console.warn("[Preview] DB limit check skipped:", dbErr);
+      }
+    }
+
+    // 5. Create preview_request record
+    let previewId = crypto.randomUUID();
+    try {
+      const { data: rec, error } = await supabase
+        .from("preview_requests")
+        .insert({
+          email: email.toLowerCase(),
+          story_id: story.id,
+          photo_urls: photoUrls,
+          status: "generating",
+          ip_address: ip === "unknown" ? null : ip,
+        })
+        .select("id")
+        .single();
+
+      if (!error && rec?.id) previewId = rec.id;
+    } catch (dbErr) {
+      console.warn("[Preview] DB insert skipped:", dbErr);
+    }
+
+    // 6. Generate personalized story (5 pages for preview)
+    //    Claude writes the text + per-page Flux image prompts.
+    //    Falls back to predefined texts if ANTHROPIC_API_KEY not set.
+    console.log(`[Preview] Generating story for "${childName}" / ${storySlug}`);
+    const storyPages = await generateStory({
+      childName,
+      storySlug,
+      storyTitle: story.title,
+      pageCount: PREVIEW_PAGE_COUNT,
+      childAge: childAge ?? 4,
+      childGender: childGender ?? "unisex",
+    });
+
+    // 7. Generate AI illustrations
+    //    Provider priority: Replicate → fal.ai → HuggingFace → mock
+    console.log(`[Preview] Generating ${PREVIEW_PAGE_COUNT} illustrations…`);
     const rawPages = await generatePreviewPages({
       storySlug,
       storyId: story.id,
       portraitUrls: photoUrls,
       childName,
-      pageCount: 5,
+      pageCount: PREVIEW_PAGE_COUNT,
+      storyPages, // pass pre-generated prompts straight through
     });
 
     const pages = rawPages.map((p) => ({
@@ -114,19 +162,26 @@ export async function POST(request: NextRequest) {
       text_content: p.textContent,
     }));
 
+    // 8. Persist completed preview to Supabase
+    try {
+      await supabase
+        .from("preview_requests")
+        .update({ status: "complete", preview_pages: pages })
+        .eq("id", previewId);
+    } catch (dbErr) {
+      console.warn("[Preview] DB update skipped:", dbErr);
+    }
+
     return NextResponse.json({
       previewId,
       status: "complete",
       pages,
       storyTitle: story.title,
       childName,
-      remainingPreviews: PREVIEW_LIMIT_PER_EMAIL - emailCount - 1,
+      remainingPreviews,
     });
   } catch (error) {
-    console.error("Preview creation error:", error);
-    return NextResponse.json(
-      { error: "Нещо се обърка. Опитайте отново." },
-      { status: 500 }
-    );
+    console.error("[Preview] Error:", error);
+    return NextResponse.json({ error: "Нещо се обърка. Опитайте отново." }, { status: 500 });
   }
 }

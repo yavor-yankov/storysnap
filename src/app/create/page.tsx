@@ -43,6 +43,7 @@ function CreatePageInner() {
   const [progress, setProgress] = useState(0);
   const [previewPages, setPreviewPages] = useState<GeneratedPage[]>([]);
   const [previewPageIdx, setPreviewPageIdx] = useState(0);
+  const [previewId, setPreviewId] = useState<string>("");
 
   // Pre-started generation promise — fires as soon as photo is uploaded
   const generationPromiseRef = useRef<Promise<Response> | null>(null);
@@ -122,6 +123,7 @@ function CreatePageInner() {
 
       await new Promise((r) => setTimeout(r, 400));
       setPreviewPages(data.pages);
+      if (data.previewId) setPreviewId(data.previewId);
       setStep("preview");
     } catch {
       clearInterval(interval);
@@ -329,6 +331,7 @@ function CreatePageInner() {
               childName={childName}
               storyTitle={story.title}
               storySlug={storySlug}
+              previewId={previewId}
               currentIdx={previewPageIdx}
               onIdxChange={setPreviewPageIdx}
             />
@@ -433,6 +436,7 @@ function PreviewStep({
   childName,
   storyTitle,
   storySlug,
+  previewId,
   currentIdx,
   onIdxChange,
 }: {
@@ -440,6 +444,7 @@ function PreviewStep({
   childName: string;
   storyTitle: string;
   storySlug: string;
+  previewId: string;
   currentIdx: number;
   onIdxChange: (i: number) => void;
 }) {
@@ -570,12 +575,12 @@ function PreviewStep({
           Харесвате как изглежда? Вземете пълната версия:
         </p>
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <a href={`/order?story=${storySlug}&type=digital`}>
+          <a href={`/order?story=${storySlug}&type=digital${previewId ? `&preview=${previewId}` : ""}`}>
             <Button className="h-12 w-full rounded-[20px] bg-brand-orange font-bold text-white hover:bg-brand-orange-hover">
               📄 PDF — €9.90
             </Button>
           </a>
-          <a href={`/order?story=${storySlug}&type=physical`}>
+          <a href={`/order?story=${storySlug}&type=physical${previewId ? `&preview=${previewId}` : ""}`}>
             <Button
               variant="outline"
               className="h-12 w-full rounded-[20px] border-brand-orange/50 font-bold text-brand-orange hover:border-brand-orange hover:bg-brand-orange hover:text-white"

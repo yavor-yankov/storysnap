@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# test artifacts
+test-output.pdf
+test-books/
+scripts/test-pdf.ts

@@ -1,73 +1,89 @@
 import Link from "next/link";
 import { BookOpen, Download, Package, ShoppingBag, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { resolveSignedPdfUrl } from "@/lib/pdf/signed-url";
 import { redirect } from "next/navigation";
 
 // Status badge config
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
-  paid: { label: "Платено", color: "bg-blue-100 text-blue-700" },
+  paid:       { label: "Платено",       color: "bg-blue-100 text-blue-700" },
   generating: { label: "Генерира се...", color: "bg-amber-100 text-amber-700" },
-  complete: { label: "Готово", color: "bg-green-100 text-green-700" },
-  shipped: { label: "Изпратено", color: "bg-teal-100 text-teal-700" },
-  delivered: { label: "Доставено", color: "bg-green-100 text-green-700" },
-  refunded: { label: "Върнато", color: "bg-gray-100 text-gray-500" },
+  complete:   { label: "Готово",         color: "bg-green-100 text-green-700" },
+  shipped:    { label: "Изпратено",      color: "bg-teal-100 text-teal-700" },
+  delivered:  { label: "Доставено",      color: "bg-green-100 text-green-700" },
+  refunded:   { label: "Върнато",        color: "bg-gray-100 text-gray-500" },
+  failed:     { label: "Грешка",         color: "bg-red-100 text-red-600" },
 };
-
-// Mock orders for dev (no Supabase configured)
-const MOCK_ORDERS = [
-  {
-    id: "demo-1",
-    order_number: "BK-20260330-0001",
-    story_title: "Космическото приключение",
-    child_name: "Никола",
-    product_type: "digital",
-    status: "complete",
-    amount_cents: 990,
-    currency: "EUR",
-    created_at: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-    pdf_url: null,
-  },
-  {
-    id: "demo-2",
-    order_number: "BK-20260325-0002",
-    story_title: "Суперхеройски ден",
-    child_name: "Ивана",
-    product_type: "physical",
-    status: "shipped",
-    amount_cents: 3400,
-    currency: "EUR",
-    created_at: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
-    pdf_url: null,
-  },
-];
 
 export default async function DashboardPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  // If Supabase is configured and user is not logged in, redirect
   const isSupabaseConfigured =
-    process.env.NEXT_PUBLIC_SUPABASE_URL &&
+    !!process.env.NEXT_PUBLIC_SUPABASE_URL &&
     !process.env.NEXT_PUBLIC_SUPABASE_URL.includes("your-project");
 
   if (isSupabaseConfigured && !user) {
     redirect("/auth/login");
   }
 
-  // Fetch orders (mock in dev)
-  let orders = MOCK_ORDERS;
+  // Fetch real orders by customer_email (works for guest checkouts too)
+  type Order = {
+    id: string;
+    order_number: string;
+    story_id: string;
+    child_name: string;
+    product_type: string;
+    status: string;
+    amount_cents: number;
+    currency: string;
+    pdf_url: string | null;
+    created_at: string;
+    storyTitle?: string;
+    signedPdfUrl?: string | null;
+  };
+
+  let orders: Order[] = [];
+
   if (isSupabaseConfigured && user) {
-    const { data } = await supabase
+    // Use service client to bypass RLS — guest orders have user_id=NULL
+    // so the normal user-session query returns nothing. We guard by email.
+    const service = createServiceClient();
+    const { data } = await service
       .from("orders")
-      .select("*")
-      .eq("user_id", user.id)
+      .select("id, order_number, story_id, child_name, product_type, status, amount_cents, currency, pdf_url, created_at")
+      .eq("customer_email", user.email!.toLowerCase())
       .order("created_at", { ascending: false });
-    if (data) orders = data;
+
+    if (data && data.length > 0) {
+      // Fetch story titles in one query
+      const storyIds = [...new Set(data.map((o) => o.story_id).filter(Boolean))];
+      const { data: stories } = await service
+        .from("stories")
+        .select("id, title")
+        .in("id", storyIds);
+
+      const storyMap = Object.fromEntries((stories ?? []).map((s) => [s.id, s.title]));
+
+      // Resolve signed URLs for complete digital orders
+      orders = await Promise.all(
+        data.map(async (o) => {
+          const storyTitle = storyMap[o.story_id] ?? "Книжка";
+          const signedPdfUrl =
+            o.product_type === "digital" && o.status === "complete" && o.pdf_url
+              ? await resolveSignedPdfUrl(o.pdf_url, 3600, o.child_name, storyTitle)
+              : null;
+          return { ...o, storyTitle, signedPdfUrl };
+        })
+      );
+    }
   }
 
   const totalSpent = orders.reduce((sum, o) => sum + o.amount_cents, 0);
-  const completedCount = orders.filter((o) => o.status === "complete" || o.status === "delivered").length;
+  const completedCount = orders.filter(
+    (o) => o.status === "complete" || o.status === "delivered"
+  ).length;
 
   return (
     <div className="min-h-screen bg-brand-beige">
@@ -91,13 +107,9 @@ export default async function DashboardPage() {
         {/* Stats */}
         <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-3">
           {[
-            { label: "Поръчки", value: orders.length, icon: BookOpen },
-            { label: "Завършени", value: completedCount, icon: Package },
-            {
-              label: "Общо изразходвани",
-              value: `€${(totalSpent / 100).toFixed(2)}`,
-              icon: ShoppingBag,
-            },
+            { label: "Поръчки",           value: orders.length,                                icon: BookOpen },
+            { label: "Завършени",          value: completedCount,                               icon: Package },
+            { label: "Общо изразходвани",  value: `€${(totalSpent / 100).toFixed(2)}`,          icon: ShoppingBag },
           ].map(({ label, value, icon: Icon }) => (
             <div
               key={label}
@@ -150,20 +162,18 @@ export default async function DashboardPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-extrabold text-brand-brown truncate">
-                        {(order as { story_title?: string }).story_title ?? "Книжка"}
+                        {order.storyTitle ?? "Книжка"}
                       </p>
-                      <span
-                        className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${status.color}`}
-                      >
+                      <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${status.color}`}>
                         {status.label}
                       </span>
                     </div>
                     <p className="mt-1 text-sm text-brand-brown-body">
-                      За: <strong>{(order as { child_name?: string }).child_name ?? "-"}</strong>
+                      За: <strong>{order.child_name ?? "-"}</strong>
                       {" · "}
                       {isDigital ? "PDF" : "Твърда корица"}
                       {" · "}
-                      №{(order as { order_number?: string }).order_number ?? order.id}
+                      №{order.order_number ?? order.id}
                     </p>
                     <p className="text-xs text-brand-brown-body/70">{date}</p>
                   </div>
@@ -173,17 +183,25 @@ export default async function DashboardPage() {
                     <p className="font-black text-brand-brown">
                       €{(order.amount_cents / 100).toFixed(2)}
                     </p>
-                    {isDigital && order.status === "complete" && order.pdf_url && (
-                      <a href={order.pdf_url} target="_blank" rel="noopener noreferrer">
+
+                    {isDigital && order.status === "complete" && order.signedPdfUrl && (
+                      <a href={order.signedPdfUrl} download>
                         <Button
                           size="sm"
                           className="gap-1.5 rounded-xl bg-brand-orange text-xs font-bold text-white hover:bg-brand-orange-hover"
                         >
                           <Download className="h-3.5 w-3.5" />
-                          PDF
+                          Изтегли PDF
                         </Button>
                       </a>
                     )}
+
+                    {isDigital && order.status === "complete" && !order.signedPdfUrl && (
+                      <span className="text-xs text-brand-brown-body/60">
+                        Провери имейла си
+                      </span>
+                    )}
+
                     {order.status === "generating" && (
                       <span className="text-xs font-semibold text-amber-600">
                         Генерира се...
@@ -193,18 +211,6 @@ export default async function DashboardPage() {
                 </div>
               );
             })}
-          </div>
-        )}
-
-        {/* Dev notice */}
-        {!isSupabaseConfigured && (
-          <div className="mt-8 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm">
-            <p className="font-bold text-amber-800">Режим на разработка</p>
-            <p className="mt-1 text-amber-700">
-              Показват се примерни поръчки. Свържете Supabase в{" "}
-              <code className="rounded bg-amber-100 px-1 font-mono text-xs">.env.local</code>{" "}
-              за реални данни.
-            </p>
           </div>
         )}
       </div>
