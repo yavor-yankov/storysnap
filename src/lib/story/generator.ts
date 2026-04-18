@@ -13,6 +13,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import Groq from "groq-sdk";
+import type { ChildAttributes, SeedPrompt } from "@/types";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -26,9 +27,15 @@ export interface StoryInput {
   childName: string;
   storySlug: string;
   storyTitle: string;
-  pageCount?: number;       // default 24 (5 for preview)
-  childAge?: number;        // helps calibrate vocabulary
+  pageCount?: number;           // default 24 (5 for preview)
+  childAge?: number;            // helps calibrate vocabulary
   childGender?: "boy" | "girl" | "unisex";
+  // ── v2 personalisation ──────────────────────────────────
+  childAttributes?: ChildAttributes;
+  /** Page-by-page beats from the story template — anchors Claude to the story skeleton */
+  seedPrompts?: SeedPrompt[];
+  /** One randomly-selected twist from story.variation_twists — makes each order unique */
+  variationTwist?: string;
 }
 
 // ─── Story theme metadata ─────────────────────────────────────────────────────
@@ -111,6 +118,7 @@ const STORY_THEMES: Record<string, StoryTheme> = {
 
 // ─── Shared Flux style suffix ─────────────────────────────────────────────────
 // Appended to EVERY image prompt for visual consistency across all pages.
+// IMPORTANT: keep this IDENTICAL on every page — it is the style anchor.
 
 // Style matches childbook.ai: semi-realistic Disney/Pixar digital illustration
 // Rich cel-shaded cartoon art, NOT watercolour
@@ -121,29 +129,71 @@ const FLUX_STYLE_SUFFIX =
   "cute cartoon-realistic child character with big expressive eyes and round face, " +
   "smooth clean linework, vivid saturated colours, depth of field bokeh background, " +
   "heartwarming joyful mood, vertical portrait composition, no text, no watermark, " +
-  "high quality digital art";
+  "high quality digital art, " +
+  "CONSISTENT ART STYLE: same illustration style, same character design, same colour grading as all other pages in this book";
 
 const FLUX_NEGATIVE =
   "ugly, deformed, blurry, bad anatomy, extra limbs, photorealistic, dark, " +
   "scary, violence, adult content, text, watermark, cropped, grainy, " +
   "flat illustration, minimalist, sketch, pencil drawing";
 
+// ─── Character anchor — injected into every image prompt ─────────────────────
+// Provides Flux with a fixed visual description of the child so the character
+// looks the same on every page, even without a reference portrait.
+
+export function buildCharacterAnchor(input: {
+  childAge?: number;
+  childGender?: "boy" | "girl" | "unisex";
+  attributes?: ChildAttributes;
+}): string {
+  const age = input.childAge ?? 4;
+  const gender =
+    input.childGender === "boy" ? "boy"
+    : input.childGender === "girl" ? "girl"
+    : "child";
+
+  const parts: string[] = [`${age}-year-old ${gender}`];
+
+  const a = input.attributes;
+  if (a?.hairStyle && a?.hairColor) {
+    parts.push(`${a.hairStyle} ${a.hairColor} hair`);
+  } else if (a?.hairColor) {
+    parts.push(`${a.hairColor} hair`);
+  } else if (a?.hairStyle) {
+    parts.push(`${a.hairStyle} hair`);
+  }
+
+  if (a?.eyeColor)  parts.push(`${a.eyeColor} eyes`);
+  if (a?.skinTone)  parts.push(`${a.skinTone} skin`);
+  if (a?.favoriteColor) parts.push(`wearing ${a.favoriteColor} outfit`);
+
+  parts.push("consistent character design across all pages");
+
+  return parts.join(", ");
+}
+
 // ─── Build image prompt from story text + theme ───────────────────────────────
 
 function buildImagePrompt(
   storyText: string,
   theme: StoryTheme,
-  childName: string,
+  input: StoryInput,
   pageNumber: number
 ): string {
-  // Strip Bulgarian name from text and replace with "the child" so Flux
-  // can keep the character appearance from the reference portrait.
+  const characterAnchor = buildCharacterAnchor({
+    childAge: input.childAge,
+    childGender: input.childGender,
+    attributes: input.childAttributes,
+  });
+
+  // Strip Bulgarian name from text so Flux doesn't confuse it with a style token
   const scene = storyText
-    .replace(new RegExp(childName, "gi"), "the child")
-    .replace(/[„"]/g, "") // remove Bulgarian quotation marks
-    .slice(0, 200);       // keep prompt under ~400 tokens total
+    .replace(new RegExp(input.childName, "gi"), "the child")
+    .replace(/[„"]/g, "")
+    .slice(0, 200);
 
   return (
+    `${characterAnchor}. ` +
     `Page ${pageNumber}: ${scene}. ` +
     `Setting: ${theme.setting}. ` +
     `Colour palette: ${theme.palette}. ` +
@@ -175,7 +225,50 @@ const CAMERA_ANGLES = [
 
 function buildClaudePrompt(input: StoryInput, theme: StoryTheme, pageCount: number): string {
   const genderBg = input.childGender === "boy" ? "момче" : input.childGender === "girl" ? "момиче" : "дете";
-  return `Write a ${pageCount}-page personalized children's book in Bulgarian for a child named "${input.childName}" (${genderBg}, age ${input.childAge ?? 4}).
+  const introPages = 3;
+  const resolutionStart = Math.floor(pageCount * 0.75) + 1;
+  const a = input.childAttributes;
+
+  // ── Hero profile block ────────────────────────────────────────────────────
+  const heroProfileLines: string[] = [
+    `Name: ${input.childName}`,
+    `Age: ${input.childAge ?? 4}`,
+    `Gender: ${genderBg}`,
+  ];
+  if (a?.hairStyle || a?.hairColor) {
+    heroProfileLines.push(`Hair: ${[a.hairStyle, a.hairColor].filter(Boolean).join(" ")}`);
+  }
+  if (a?.eyeColor)          heroProfileLines.push(`Eyes: ${a.eyeColor}`);
+  if (a?.skinTone)          heroProfileLines.push(`Skin tone: ${a.skinTone}`);
+  if (a?.favoriteColor)     heroProfileLines.push(`Favourite colour: ${a.favoriteColor} — feature in clothing/accessories`);
+  if (a?.interests)         heroProfileLines.push(`Interests: ${a.interests}`);
+  if (a?.personalityTraits) heroProfileLines.push(`Personality: ${a.personalityTraits}`);
+
+  const heroProfile = heroProfileLines.map((l) => `- ${l}`).join("\n");
+
+  // ── Seed beats block (optional) ───────────────────────────────────────────
+  const seedSection = input.seedPrompts && input.seedPrompts.length > 0
+    ? `\n═══ STORY SKELETON (follow these beats exactly) ═══\n` +
+      input.seedPrompts
+        .map((s) => `Page ${s.page}: ${s.beat}. Image concept: ${s.image_concept}`)
+        .join("\n")
+    : "";
+
+  // ── Variation twist (optional) ────────────────────────────────────────────
+  const twistSection = input.variationTwist
+    ? `\n═══ VARIATION TWIST (weave this into the story naturally) ═══\n${input.variationTwist}`
+    : "";
+
+  // ── Interests & personality instruction ───────────────────────────────────
+  const personaliseInstruction =
+    (a?.interests || a?.personalityTraits)
+      ? `- Weave at least one interest (${a?.interests ?? ""}) and one personality trait (${a?.personalityTraits ?? ""}) naturally into the story — not as a forced mention but as part of the plot.`
+      : "";
+
+  return `You are writing a ${pageCount}-page personalized Bulgarian children's book for a child named "${input.childName}".
+
+═══ HERO PROFILE (maintain visually and narratively on every single page) ═══
+${heroProfile}
 
 Story title: "${input.storyTitle}"
 Genre: ${theme.genre}
@@ -183,29 +276,43 @@ Setting: ${theme.setting}
 Supporting cast: ${theme.cast}
 Story arc: ${theme.arc}
 Mood: ${theme.mood}
+${seedSection}${twistSection}
 
-STORY RULES:
-- Each page = exactly 2–3 sentences in Bulgarian, simple vocabulary for age ${input.childAge ?? 4}
-- Use the child's name "${input.childName}" naturally (not on every page — vary it)
-- Warm, joyful, safe — no fear, no sadness at the end
-- Pages 1–3: introduction, pages 4–${Math.floor(pageCount * 0.7)}: adventure, pages ${Math.floor(pageCount * 0.7) + 1}–${pageCount}: resolution + happy ending
-- Each page must advance the story — no two pages should describe the same scene
+═══ STORY TEXT RULES ═══
+- Each page = 4–6 rich Bulgarian sentences. This is a BOOK PAGE — write enough to fill it.
+- Minimum 50 words per page, maximum 80 words.
+- Use vivid sensory details: what the child sees, hears, smells, feels.
+- Include natural dialogue where it fits (characters speaking to each other).
+- Use "${input.childName}" naturally — 2–3 times per page max, vary with pronouns.
+- Every page must ADVANCE the plot — cause leads to effect leads to next cause.
+- Pages 1–${introPages}: establish the world, introduce supporting characters with personality.
+- Pages ${introPages + 1}–${resolutionStart - 1}: adventure deepens, challenges arise, friendships grow.
+- Pages ${resolutionStart}–${pageCount}: meaningful resolution, emotional payoff, warm happy ending.
+- Vocabulary: simple but not flat. Use beautiful Bulgarian — vivid verbs, warm adjectives.
+- NO generic filler phrases like "и те се забавлявали много" — every sentence must be specific and visual.
+${personaliseInstruction ? `- ${personaliseInstruction}` : ""}
 
-IMAGE PROMPT RULES (imagePromptScene field — very important for illustration quality):
-- Write a UNIQUE, SPECIFIC scene for each page — different location, action, and camera angle every time
-- Include: exact action happening, specific location within the setting, which characters are present, emotion/expression
-- Include a camera angle from this list, rotating through them: ${CAMERA_ANGLES.join(" / ")}
-- Be concrete and visual: NOT "the child explores" but "the child kneels beside a glowing purple crystal cave entrance, eyes wide with wonder, Zorko hovering behind, medium shot"
-- 2–4 sentences of vivid visual description in English
-- Each page MUST be visually distinct from all others
+═══ IMAGE PROMPT RULES ═══
+Each imagePromptScene MUST begin with the full character description so every illustration shows the same child:
+CHARACTER: ${buildCharacterAnchor({ childAge: input.childAge, childGender: input.childGender, attributes: input.childAttributes })}
 
-Return ONLY this JSON (no markdown):
+Then rotate through these camera angles for variety:
+${CAMERA_ANGLES.join(" / ")}
+
+Requirements per image prompt:
+- Start with camera angle (e.g. "Wide establishing shot:")
+- Describe the EXACT action happening at this moment in the story
+- Name specific location details (e.g. "under a giant oak with twisted roots", not just "in the forest")
+- Describe characters' exact poses, expressions, what they're holding
+- 3–5 sentences of vivid English visual description
+
+Return ONLY valid JSON (no markdown fences, no extra text):
 {
   "pages": [
     {
       "pageNumber": 1,
-      "storyText": "Bulgarian sentence(s) here.",
-      "imagePromptScene": "Detailed English scene: [specific action], [specific location], [characters + expression], [camera angle]. [Additional visual detail about lighting, props, or environment that makes this page unique]."
+      "storyText": "Rich Bulgarian paragraph here — 4-6 sentences, 50-80 words, vivid and specific.",
+      "imagePromptScene": "CHARACTER: [copy character anchor]. Camera angle: exact action, specific location with detail, characters with expressions and poses."
     }
   ]
 }`;
@@ -216,7 +323,7 @@ Return ONLY this JSON (no markdown):
 function parseStoryJson(
   raw: string,
   theme: StoryTheme,
-  childName: string
+  input: StoryInput
 ): StoryPage[] {
   // Strip markdown fences if model wrapped in ```json ... ```
   const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
@@ -226,7 +333,7 @@ function parseStoryJson(
   return parsed.pages.map((p) => ({
     pageNumber: p.pageNumber,
     storyText: p.storyText,
-    imagePrompt: buildFullImagePrompt(p.imagePromptScene, theme, childName, p.pageNumber),
+    imagePrompt: buildFullImagePrompt(p.imagePromptScene, theme, input, p.pageNumber),
   }));
 }
 
@@ -273,7 +380,7 @@ async function generateWithGroq(
 
   const response = await client.chat.completions.create({
     model: "llama-3.3-70b-versatile",
-    max_tokens: 6000,
+    max_tokens: 12000,
     temperature: 0.8,
     messages: [
       { role: "system", content: CLAUDE_SYSTEM },
@@ -285,7 +392,7 @@ async function generateWithGroq(
   console.log(`[StoryGen] Groq story generated in ${elapsed}s`);
 
   const raw = response.choices[0]?.message?.content ?? "";
-  return parseStoryJson(raw, theme, input.childName);
+  return parseStoryJson(raw, theme, input);
 }
 
 // ─── Claude path (paid, secondary) ───────────────────────────────────────────
@@ -302,7 +409,7 @@ async function generateWithClaude(
 
   const response = await client.messages.create({
     model: "claude-opus-4-6",
-    max_tokens: 6000,
+    max_tokens: 12000,
     system: CLAUDE_SYSTEM,
     messages: [
       { role: "user", content: buildClaudePrompt(input, theme, pageCount) },
@@ -313,15 +420,21 @@ async function generateWithClaude(
   console.log(`[StoryGen] Claude story generated in ${elapsed}s`);
 
   const raw = response.content[0].type === "text" ? response.content[0].text : "";
-  return parseStoryJson(raw, theme, input.childName);
+  return parseStoryJson(raw, theme, input);
 }
 
 function buildFullImagePrompt(
   scene: string,
   theme: StoryTheme,
-  childName: string,
+  input: StoryInput,
   pageNumber: number
 ): string {
+  const characterAnchor = buildCharacterAnchor({
+    childAge: input.childAge,
+    childGender: input.childGender,
+    attributes: input.childAttributes,
+  });
+
   // Alternate lighting/time-of-day to force visual variety between pages
   const lightingVariants = [
     "warm golden hour sunlight",
@@ -336,6 +449,7 @@ function buildFullImagePrompt(
   const lighting = lightingVariants[(pageNumber - 1) % lightingVariants.length];
 
   return (
+    `${characterAnchor}. ` +
     `${scene} ` +
     `Colour palette: ${theme.palette}. Lighting: ${lighting}. ` +
     `The child hero (same face from reference portrait photo) is the central character. ` +
@@ -564,13 +678,17 @@ function generateFallback(
   pageCount: number
 ): StoryPage[] {
   const rawTexts = FALLBACK_TEXTS[input.storySlug] ?? FALLBACK_TEXTS["kosmichesko-priklyuchenie"];
+  const SENTENCES_PER_PAGE = 4; // combine 4 sentences to make a rich page
   return Array.from({ length: pageCount }, (_, i) => {
-    const idx = i % rawTexts.length;
-    const storyText = rawTexts[idx].replace(/{name}/g, input.childName);
+    // Take 4 consecutive sentences, wrapping around if needed
+    const sentences = Array.from({ length: SENTENCES_PER_PAGE }, (__, j) =>
+      rawTexts[(i * SENTENCES_PER_PAGE + j) % rawTexts.length]
+    );
+    const storyText = sentences.join(" ").replace(/{name}/g, input.childName);
     return {
       pageNumber: i + 1,
       storyText,
-      imagePrompt: buildImagePrompt(storyText, theme, input.childName, i + 1),
+      imagePrompt: buildImagePrompt(storyText, theme, input, i + 1),
     };
   });
 }

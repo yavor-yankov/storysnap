@@ -1,6 +1,7 @@
 -- ============================================================
 -- HeroBook — Safe Migration (run on existing DB)
 -- Uses IF NOT EXISTS everywhere — safe to re-run
+-- v2 additions at the bottom (migration_v2_personalization.sql)
 -- ============================================================
 
 -- ============================================================
@@ -279,3 +280,8 @@ values
   ('Феята на горите', 'feyata-na-gorite', 'Вълшебна приказка за малката фея, която пази горите и животинките.', 2, 5, 'girl', 20, '/images/stories/fairy-cover.jpg', ARRAY['/images/stories/fairy-p1.jpg'], true, false, 7),
   ('Динозавърът приятел', 'dinozavarat-priyatel', 'Какво ще стане, ако твоето дете намери динозавърче? Приятелство без граници!', 1, 5, 'unisex', 20, '/images/stories/dino-cover.jpg', ARRAY['/images/stories/dino-p1.jpg', '/images/stories/dino-p2.jpg'], true, true, 8)
 on conflict (slug) do nothing;
+
+-- ============================================================
+-- V2: Run migration_v2_personalization.sql next
+-- (child_attributes + story template columns)
+-- ============================================================

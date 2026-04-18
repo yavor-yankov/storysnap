@@ -96,6 +96,7 @@ export function StoryCatalog() {
   const [filters, setFilters] = useState<StoryFilters>({
     ageGroup: "all",
     gender: "all",
+    tag: null,
   });
 
   const filtered = PLACEHOLDER_STORIES.filter((s) => {
@@ -201,7 +202,7 @@ export function StoryCatalog() {
               Няма книжки за тези филтри.
             </p>
             <button
-              onClick={() => setFilters({ ageGroup: "all", gender: "all" })}
+              onClick={() => setFilters({ ageGroup: "all", gender: "all", tag: null })}
               className="mt-4 text-sm font-bold text-brand-orange underline"
             >
               Изчисти филтрите

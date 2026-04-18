@@ -3,6 +3,8 @@
 
 import { fal } from "@fal-ai/client";
 import { HfInference } from "@huggingface/inference";
+import { buildCharacterAnchor } from "@/lib/story/generator";
+import type { ChildAttributes } from "@/types";
 
 export interface FaceSwapInput {
   storyId: string;
@@ -415,23 +417,35 @@ export async function generatePreviewPages(params: {
   childName: string;
   pageCount?: number;
   storyPages?: Array<{ pageNumber: number; storyText: string; imagePrompt: string }>;
+  childAge?: number;
+  childGender?: "boy" | "girl" | "unisex";
+  childAttributes?: ChildAttributes;
 }): Promise<FaceSwapResult[]> {
-  const { storySlug, childName, portraitUrls, pageCount = 5, storyPages } = params;
-  return runGeneration({ storySlug, childName, portraitUrls, pageCount, isPreview: true, storyPages });
+  const { storySlug, childName, portraitUrls, pageCount = 5, storyPages,
+          childAge, childGender, childAttributes } = params;
+  return runGeneration({ storySlug, childName, portraitUrls, pageCount, isPreview: true,
+                         storyPages, childAge, childGender, childAttributes });
 }
 
 /**
- * generateFullPages — 24 pages, called from the Stripe webhook after payment.
+ * generateFullPages — called from the Stripe webhook after payment.
+ * pageCount defaults to 24; set BOOK_PAGE_COUNT env var to override (e.g. 10 for testing).
  */
 export async function generateFullPages(params: {
   storySlug: string;
   storyId: string;
   portraitUrls: string[];
   childName: string;
+  pageCount?: number;
   storyPages?: Array<{ pageNumber: number; storyText: string; imagePrompt: string }>;
+  childAge?: number;
+  childGender?: "boy" | "girl" | "unisex";
+  childAttributes?: ChildAttributes;
 }): Promise<FaceSwapResult[]> {
-  const { storySlug, childName, portraitUrls, storyPages } = params;
-  return runGeneration({ storySlug, childName, portraitUrls, pageCount: 24, isPreview: false, storyPages });
+  const { storySlug, childName, portraitUrls, pageCount = 24, storyPages,
+          childAge, childGender, childAttributes } = params;
+  return runGeneration({ storySlug, childName, portraitUrls, pageCount, isPreview: false,
+                         storyPages, childAge, childGender, childAttributes });
 }
 
 // ─── Provider priority: Replicate → fal.ai → HuggingFace → mock ──────────────
@@ -443,8 +457,15 @@ async function runGeneration(params: {
   pageCount: number;
   isPreview: boolean;
   storyPages?: Array<{ pageNumber: number; storyText: string; imagePrompt: string }>;
+  childAge?: number;
+  childGender?: "boy" | "girl" | "unisex";
+  childAttributes?: ChildAttributes;
 }): Promise<FaceSwapResult[]> {
-  const { storySlug, childName, portraitUrls, pageCount, isPreview, storyPages } = params;
+  const { storySlug, childName, portraitUrls, pageCount, isPreview, storyPages,
+          childAge, childGender, childAttributes } = params;
+
+  // Character anchor — prepended to fallback image prompts for visual consistency
+  const characterAnchor = buildCharacterAnchor({ childAge, childGender, attributes: childAttributes });
 
   const hasReplicate = !!process.env.REPLICATE_API_TOKEN;
   const hasFal       = !!process.env.FAL_KEY;
@@ -459,8 +480,11 @@ async function runGeneration(params: {
   // ── Helper: get text + imagePrompt for a page ──────────────────────────────
   function getPageData(pageNum: number): { storyText: string; imagePrompt: string } {
     const pre = storyPages?.find((p) => p.pageNumber === pageNum);
+    // If the AI story generator already produced imagePrompts, use them as-is —
+    // they already have the character anchor baked in via generator.ts.
     if (pre) return { storyText: pre.storyText, imagePrompt: pre.imagePrompt };
 
+    // Fallback path: build a prompt from PAGE_TEXTS + character anchor
     const storyText = getPageText(storySlug, pageNum, childName);
     const style = STORY_STYLES[storySlug] ?? {
       scene: "magical adventure",
@@ -468,6 +492,7 @@ async function runGeneration(params: {
       mood: "warm, whimsical",
     };
     const imagePrompt =
+      `${characterAnchor}. ` +
       `Page ${pageNum}: ${storyText.replace(new RegExp(childName, "gi"), "the child").slice(0, 200)}. ` +
       `Setting: ${style.scene}. Colour palette: ${style.palette}. Mood: ${style.mood} atmosphere. ` +
       `The same child character maintaining exact face from reference portrait photo appears as hero. ` +

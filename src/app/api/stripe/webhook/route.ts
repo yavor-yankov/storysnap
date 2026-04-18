@@ -4,6 +4,7 @@ import { generateFullPages } from "@/lib/ai/face-swap";
 import { sendOrderConfirmation, sendBookReady } from "@/lib/email/sender";
 import { getStoryBySlug } from "@/lib/stories";
 import { createServiceClient } from "@/lib/supabase/server";
+import type { ChildAttributes } from "@/types";
 
 export const maxDuration = 300;
 
@@ -90,6 +91,8 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
         story_id: story.id,
         product_type: productType,
         child_name: childName,
+        child_age: childAge,
+        child_gender: childGender,
         customer_email: customerEmail,
         amount_cents: session.amount_total ?? 0,
         currency: "EUR",
@@ -98,6 +101,7 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
         status: "generating",
         photo_urls: [],
         shipping_address: meta.shippingAddress ? JSON.parse(meta.shippingAddress) : null,
+        // child_attributes is set after the preview_request is fetched below
       })
       .select("id, order_number")
       .single();
@@ -145,20 +149,24 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
     console.error("Confirmation email failed:", e);
   }
 
-  // 2. Fetch portrait URLs from preview request
+  // 2. Fetch portrait URLs + child attributes from preview request
   let portraitUrls: string[] = [];
+  let childAttributes: ChildAttributes | undefined;
   if (previewId) {
     try {
       const { data: preview } = await supabase
         .from("preview_requests")
-        .select("photo_urls")
+        .select("photo_urls, child_attributes")
         .eq("id", previewId)
         .single();
       if (preview?.photo_urls?.length) {
         portraitUrls = preview.photo_urls;
       }
+      if (preview?.child_attributes) {
+        childAttributes = preview.child_attributes as ChildAttributes;
+      }
     } catch (e) {
-      console.warn("Could not fetch portrait URLs:", e);
+      console.warn("Could not fetch preview request:", e);
     }
   }
 
@@ -172,23 +180,29 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
       //     Falls back to predefined texts if ANTHROPIC_API_KEY not set.
       const { generateStory } = await import("@/lib/story/generator");
       console.log(`[Webhook] Generating story for "${childName}" / ${storySlug}`);
+      const pageCount = parseInt(process.env.BOOK_PAGE_COUNT ?? "24", 10);
       const storyPages = await generateStory({
         childName,
         storySlug,
         storyTitle: story.title,
-        pageCount: 24,
+        pageCount,
         childAge,
         childGender,
+        childAttributes, // v2: hair/eye/skin/interests/personality
       });
 
       // 3b. Generate illustrations (Replicate → fal.ai → HuggingFace → mock)
-      console.log(`[Webhook] Generating 24 illustrations for order ${memOrder.orderNumber}`);
+      console.log(`[Webhook] Generating ${pageCount} illustrations for order ${memOrder.orderNumber}`);
       const pages = await generateFullPages({
         storySlug,
         storyId: story.id,
         portraitUrls,
         childName,
-        storyPages, // pass Claude-generated prompts
+        pageCount,
+        storyPages,       // pass Claude-generated prompts
+        childAge,
+        childGender,
+        childAttributes,  // v2: character anchor for image prompts
       });
 
       // 4. Generate PDF
@@ -234,6 +248,8 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
             .update({
               status: "complete",
               pdf_url: pdfUrl,
+              // Store attributes permanently on the order record
+              ...(childAttributes ? { child_attributes: childAttributes } : {}),
             })
             .eq("id", dbOrderId);
 
